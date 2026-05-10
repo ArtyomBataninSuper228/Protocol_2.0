@@ -1,6 +1,5 @@
 # macOS мусор
 .DS_Store
-
 # Xcode мусор
 build/
 DerivedData/
