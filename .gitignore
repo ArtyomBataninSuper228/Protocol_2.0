@@ -1,0 +1,17 @@
+# macOS мусор
+.DS_Store
+
+# Xcode мусор
+build/
+DerivedData/
+*.xcworkspace
+xcuserdata/
+
+# Python мусор
+__pycache__/
+*.pyc
+.venv/
+
+# IDE мусор
+.idea/
+.vscode/
