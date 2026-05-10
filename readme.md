@@ -22,7 +22,8 @@ your data to blocks and share it among physical channels.
 
 In "Block operating" mode logic channel receives blocks from 
 application and sends it with free or reserved physical 
-channel.
+channel. The most efficient using of "Block" mode is video
+streaming, where 1 block = 1 frame.
 
 
 
