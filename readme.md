@@ -3,7 +3,7 @@ in networks with high loss, jitter and other negative phenomena.
 
 Main "engine" of protocol is physical channel.
 
-![Channel structure](documentation/images/Channels2.drawio.png)
+![Channel structure](documentation/images/Channels.drawio.png)
 
 
 One connection may include many physical channels.
