@@ -44,7 +44,7 @@ struct Trait_X25519_SHA512 {
 };
 
 template <typename T>
-class OqsEncoder {
+class OqsEncoder { 
 public:
     static constexpr std::size_t PUBLIC_KEY_SIZE = T::pk_size;
     static constexpr std::size_t PRIVATE_KEY_SIZE = T::sk_size;
@@ -55,6 +55,25 @@ public:
     using PrivateKeyBuf = std::array<uint8_t, PRIVATE_KEY_SIZE>;
     using CiphertextBuf = std::array<uint8_t, CIPHERTEXT_SIZE>;
     using SecretBuf = std::array<uint8_t, SECRET_SIZE>;
+
+    /**
+     * ГЕНЕРАЦИЯ КЛЮЧЕЙ (Вызывается на стороне СЕРВЕРА)
+     * Заполняет out_pub_key и out_priv_key случайными постквантовыми ключами.
+     */
+    bool generate_keypair(PublicKeyBuf& out_pub_key, PrivateKeyBuf& out_priv_key) {
+        // Инициализируем выбранный в шаблоне алгоритм (например, ML-KEM-1024)
+        OQS_KEM* kem = OQS_KEM_new(T::alg_name);
+        if (!kem) return false;
+
+        // Генерируем пару ключей. Функция сама заполнит массивы нужным числом байт
+        int rc = OQS_KEM_keypair(kem, out_pub_key.data(), out_priv_key.data());
+
+        // Обязательно освобождаем память структуры
+        OQS_KEM_free(kem);
+
+        return rc == OQS_SUCCESS;
+    }
+
 
     bool encapsulate(const PublicKeyBuf& pub_key, CiphertextBuf& out_ct, SecretBuf& out_secret) {
         OQS_KEM* kem = OQS_KEM_new(T::alg_name);
@@ -74,7 +93,7 @@ public:
 };
 
 template <typename T>
-class ClassicalEncoder {
+class ClassicalEncoder { // sodium_memzero(server_sk.data(), server_sk.size()); !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 public:
     static constexpr std::size_t PUBLIC_KEY_SIZE = T::pk_size;
     static constexpr std::size_t PRIVATE_KEY_SIZE = T::sk_size;

@@ -45,7 +45,7 @@ private:
     std::vector<uint8_t> crypto_data{};
     std::vector<uint8_t> cert_public_key_{};
     std::vector<uint8_t> cert_private_key_{};
-    
+	
     // Logic
     // 0 - initialising, 1 - checking parameters, 2 - starting up listener, 3 - starting up worker, 4 - online, -1 - critical error
     short state = 0;
@@ -55,6 +55,7 @@ private:
 public:
     // Logs
     Logger lgr = Logger(io_context_);
+    SymmetricCoder psk_encoder = SymmetricCoder();
     
 
 public:
@@ -75,6 +76,9 @@ public:
         if (state == 0) {
             mode = target_mode;
         }
+        else {
+            lgr.log(3, "SET_MODE", "Mode cannot be changed after initialization");
+        }
     }
 
     void set_port(int port) {
@@ -83,9 +87,17 @@ public:
         }
     }
 
-    void set_psk(const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& key) {
+    void set_psk(const std::array<uint8_t, SymmetricCoder::keylength>& key) {
         if (state == 0) {
-            psk_key_ = key;
+            if (psk_encoder.set_key(key)) {
+				lgr.log(0, "SET_PSK", "PSK set successfully");
+            }
+            else {
+				lgr.log(3, "SET_PSK", "Failed to set PSK");
+            }
+        }
+        else {
+			lgr.log(3, "SET_PSK", "PSK cannot be changed after initialization");
         }
     }
 
@@ -128,10 +140,11 @@ public:
         }
         
         if (mode == 2){
-            if (psk_key_ == std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>{}) {
-                lgr.log(3, "First check: Validation", "Warning: PSK key might be empty in mode 2");
+            if (psk_encoder.is_key_set_func() == 0) {
+                lgr.log(2, "First check: Validation", "Warning: PSK key might be empty in mode 2");
                 return false;
             }
+
         }
         
         // Фаза 2: Открытие сокета и бинд порта

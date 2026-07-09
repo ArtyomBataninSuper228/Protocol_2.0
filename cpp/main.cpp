@@ -28,6 +28,7 @@ void stop_autosave(Logger &lgr, int time, asio::steady_timer &timer){
     timer.expires_after(std::chrono::seconds(time));
     timer.async_wait([&lgr](const std::error_code& ec) mutable {
         if (!ec) {
+            
             std::cout<<"Stopping!"<<std::endl;
             lgr.stop_autosave();
         }
@@ -39,6 +40,7 @@ void stop_autosave(Logger &lgr, int time, asio::steady_timer &timer){
 
 
 
+
 int main() {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
@@ -46,8 +48,10 @@ int main() {
 #endif
     try {
         asio::io_context io_context;
-        Server s = Server(io_context);
-        s.set_mode(1);
+		using myserver = Server<ChaCha20_Poly1305_Encoder, OqsEncoder<OQS_Level5>, Crc32Hasher, Connection, Connection, Connection>;
+        Server s = myserver(io_context);
+        s.set_mode(2);
+		s.psk_encoder.generate_key();
         s.set_port(8080);
         s.lgr.set_printlevel(0);
         s.lgr.set_loglevel(0);

@@ -14,6 +14,7 @@ public:
 private:
 	std::array<uint8_t, keylength> key;
 	bool is_key_set = false;
+public:
 
 	bool set_key(const std::array<uint8_t, keylength>& new_key) {
 		if (new_key.size() != keylength) {
@@ -45,6 +46,9 @@ private:
         else {
             return 0;
         }
+    }
+    bool is_key_set_func()  {
+        return is_key_set;
     }
 
     std::vector<uint8_t> encrypt_packet(const std::vector<uint8_t>& data,
