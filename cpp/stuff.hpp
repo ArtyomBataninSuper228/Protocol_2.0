@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
+#include <asio.hpp>
 
 
 #pragma GCC visibility push(default)
@@ -114,6 +115,7 @@ private:
     int next_id_ = 0;
     std::mutex mutex_;
     asio::steady_timer timer_;
+    std::atomic<bool> is_saving_{false};
 
 public:
     Logger(asio::io_context& io, size_t loglength = 10000)
@@ -134,8 +136,6 @@ public:
                 logs_.pop_front();
             }
         }
-        
-        
         if (level >= printlevel) {
                     std::string level_str = "Unknown";
                     switch (level) {
@@ -194,16 +194,34 @@ public:
             }
         }
     void start_autosave(int interval_seconds = 60, const std::string& filename = "server_logs.json") {
+        is_saving_ = true;
         timer_.expires_after(std::chrono::seconds(interval_seconds));
         
-        // Добавляем mutable в конец списка аргументов лямбды!
         timer_.async_wait([this, interval_seconds, filename](const std::error_code& ec) mutable {
-            if (!ec) {
-                save_to_file(filename);
-                start_autosave(interval_seconds, filename);
+            if (!is_saving_) {
+                std::cout << "[Logger] Асинхронное автосохранение успешно остановлено." << std::endl;
+                return;
             }
+            if (ec){
+                log(4, "Logger autosaver", ec.message());
+                std::cerr<<"[Logger] " <<ec.message()<<std::endl;
+                return;
+            }
+
+            save_to_file(filename);
+            start_autosave(interval_seconds, filename);
         });
     }
+    void set_loglevel(int level){
+        loglevel_ = level;
+    }
+    void set_printlevel(int level){
+        printlevel = level;
+    }
+    void stop_autosave() {
+        is_saving_ = false;
+        timer_.cancel();
+        }
 };
 
 // ============================================================================
