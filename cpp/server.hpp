@@ -20,52 +20,10 @@
 /* The classes below are exported */
 #pragma GCC visibility push(default)
 
-class zero_encoder{
-public:
-    size_t keylength =0;
-    size_t noncelength = 0;
-    
-    std::vector<uint8_t> encrypt_packet(const std::vector<uint8_t>& data,
-                                        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& key,
-                                        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES>& nonce) {
-        
-        // Размер выходного буфера: размер данных + 16 байт на тег Poly1305
-        std::vector<uint8_t> ciphertext(data.size());
-        ciphertext = data;
-
-        return ciphertext;
-    }
-    
-    std::vector<uint8_t> decrypt_packet(const std::vector<uint8_t>& ciphertext,
-                                        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& key,
-                                        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES>& nonce) {
-        
-        if (ciphertext.size() < crypto_aead_xchacha20poly1305_ietf_ABYTES) {
-            throw std::runtime_error("Пакет слишком мал, тег Poly1305 отсутствует!");
-        }
-
-        std::vector<uint8_t> decrypted(ciphertext.size() - crypto_aead_xchacha20poly1305_ietf_ABYTES);
-        unsigned long long decrypted_len;
-
-        int result = crypto_aead_xchacha20poly1305_ietf_decrypt(
-            decrypted.data(), &decrypted_len,
-            nullptr,
-            ciphertext.data(), ciphertext.size(),
-            nullptr, 0,
-            nonce.data(),
-            key.data()
-        );
-
-        if (result != 0) {
-            throw std::runtime_error("Критическая ошибка: Тег Poly1305 не валиден!");
-        }
-        return decrypted;
-    }
-    
-};
 
 
 
+using symetric_coder = zero_encoder;
 
 
 class Connection{

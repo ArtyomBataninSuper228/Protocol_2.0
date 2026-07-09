@@ -59,3 +59,26 @@ public:
         return decrypted;
     }
 };
+
+
+class zero_encoder {
+public:
+    size_t keylength = 0;
+    size_t noncelength = 0;
+
+    std::vector<uint8_t> encrypt_packet(const std::vector<uint8_t>& data,
+        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& key,
+        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES>& nonce) {
+
+        return data;
+    }
+
+    std::vector<uint8_t> decrypt_packet(const std::vector<uint8_t>& ciphertext,
+        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& key,
+        const std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES>& nonce) {
+
+
+        return ciphertext;
+    }
+
+};

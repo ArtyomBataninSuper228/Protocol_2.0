@@ -5,6 +5,10 @@
 #include <sodium.h>
 #include <oqs/oqs.h>
 #include "server.hpp"
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 using asio::ip::udp;
 /*
 🍺
@@ -36,6 +40,10 @@ void stop_autosave(Logger &lgr, int time, asio::steady_timer &timer){
 
 
 int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     try {
         asio::io_context io_context;
         Server s = Server(io_context);
