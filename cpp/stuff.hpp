@@ -23,6 +23,7 @@
 #include <fstream>
 #include <asio.hpp>
 
+#pragma once
 
 #pragma GCC visibility push(default)
 

@@ -23,15 +23,12 @@
 
 
 
-using symetric_coder = zero_encoder;
-
-
 class Connection{
     
     
 };
 
-
+template<typename SymmetricCoder, typename AsymmetricCoder, typename Hasher, typename Connection, typename Session, typename Session_Handler>
 class Server {
 private:
     
