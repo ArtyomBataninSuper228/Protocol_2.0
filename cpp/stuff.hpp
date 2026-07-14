@@ -87,8 +87,7 @@ struct Crc32Hasher {
     // Делаем оператор шаблонным, чтобы он переваривал std::array ЛЮБОГО размера!
     template <std::size_t N>
     uint32_t operator()(const std::array<uint8_t, N>& p) const {
-        // Компилятор видит, что p — это std::array, 
-        // и сам выбирает нужную перегрузку crc32!
+
         return crc32(p);
     }
 };

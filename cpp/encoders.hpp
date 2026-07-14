@@ -7,93 +7,98 @@
 #include <sodium.h>
 #pragma once
 
-class ChaCha20_Poly1305_Encoder{
-public:
-    static constexpr size_t keylength = crypto_aead_xchacha20poly1305_ietf_KEYBYTES;
-    static constexpr size_t noncelength = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
-private:
-	std::array<uint8_t, keylength> key;
-	bool is_key_set = false;
-public:
+struct ChaCha20Poly1305Coder {
+	// Стандартный ключ ChaCha20 - 32 байта
+    static constexpr std::size_t KEY_BYTES = crypto_aead_chacha20poly1305_ietf_KEYBYTES;
+    // Poly1305 MAC tag всегда 16 байт
+    static constexpr std::size_t TAG_BYTES = 16;
+    // Стандартный IETF ChaCha20 nonce - 12 байт
+    static constexpr std::size_t NONCE_BYTES = 12;
 
-	bool set_key(const std::array<uint8_t, keylength>& new_key) {
-		if (new_key.size() != keylength) {
-			return false; // Неверный размер ключа
-		}
-        if (is_key_set) {
-			return false; // Ключ уже установлен, нельзя изменить
-        }
-		std::copy(new_key.begin(), new_key.end(), key.begin());
-		is_key_set = true;
-		return true;
-	}
+    // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
+    // plaintext_len — это чистый размер твоих данных до шифрования.
+    static void encrypt(std::span<uint8_t> payload,
+        size_t plaintext_len,
+        std::span<const uint8_t> key,
+        std::span<const uint8_t> nonce) {
 
-	std::array<uint8_t, keylength> get_key() const {
-        if (is_key_set) {
-            return key;
-        }
-        else {
-            throw std::runtime_error("Ключ не установлен!");
-        }
-	}
-
-    bool generate_key() {
-        if (is_key_set == 0) {
-            randombytes_buf(key.data(), keylength);
-            is_key_set = true;
-            return true;
-        }
-        else {
-            return 0;
-        }
-    }
-    bool is_key_set_func()  {
-        return is_key_set;
-    }
-
-    std::vector<uint8_t> encrypt_packet(const std::vector<uint8_t>& data,
-                                        const std::array<uint8_t, noncelength>& nonce) {
-        
-        // Размер выходного буфера: размер данных + 16 байт на тег Poly1305
-        std::vector<uint8_t> ciphertext(data.size() + crypto_aead_xchacha20poly1305_ietf_ABYTES);
         unsigned long long ciphertext_len;
 
-        // Вызов из libsodium (используем XChaCha20 для длинного нонса в 24 байта)
-        crypto_aead_xchacha20poly1305_ietf_encrypt(
-            ciphertext.data(), &ciphertext_len,
-            data.data(), data.size(),
-            nullptr, 0, // Дополнительные нешифруемые данные (если нужны, например заголовок пакета)
-            nullptr,
-            nonce.data(),
-            key.data()
+        // Используем встроенную в libsodium функцию in-place шифрования
+        // Она зашифрует данные прямо в payload.data() и запишет 16 байт тега сразу за ними.
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            payload.data(), &ciphertext_len,             // куда писать результат
+            payload.data(), plaintext_len,               // что шифровать (берем из того же буфера)
+            nullptr, 0,                                  // связанные данные (AAD) — не используем
+            nullptr,                                     // nsec (не используется)
+            nonce.data(),                                // одноразовый код
+            key.data()                                   // симметричный ключ
         );
-
-        return ciphertext;
     }
-    
-    std::vector<uint8_t> decrypt_packet(const std::vector<uint8_t>& ciphertext,
-        const std::array < uint8_t, noncelength > & nonce) {
-        
-        if (ciphertext.size() < crypto_aead_xchacha20poly1305_ietf_ABYTES) {
-            throw std::runtime_error("Пакет слишком мал, тег Poly1305 отсутствует!");
-        }
 
-        std::vector<uint8_t> decrypted(ciphertext.size() - crypto_aead_xchacha20poly1305_ietf_ABYTES);
+    static bool decrypt(std::span<uint8_t> payload,
+        std::span<const uint8_t> key,
+        std::span<const uint8_t> nonce) {
+
         unsigned long long decrypted_len;
 
-        int result = crypto_aead_xchacha20poly1305_ietf_decrypt(
-            decrypted.data(), &decrypted_len,
-            nullptr,
-            ciphertext.data(), ciphertext.size(),
-            nullptr, 0,
+        // Дешифруем прямо по месту. Если пакет подделан, функция вернет код ошибки != 0.
+        int result = crypto_aead_chacha20poly1305_ietf_decrypt(
+            payload.data(), &decrypted_len,              // куда писать расшифрованный текст
+            nullptr,                                     // nsec (не используется)
+            payload.data(), payload.size(),              // зашифрованные данные вместе с тегом
+            nullptr, 0,                                  // связанные данные
             nonce.data(),
             key.data()
         );
 
-        if (result != 0) {
-            throw std::runtime_error("Критическая ошибка: Тег Poly1305 не валиден!");
-        }
-        return decrypted;
+        return (result == 0); // true если целостность подтверждена и данные расшифрованы
+    }
+};
+
+struct XChaCha20Poly1305Coder {
+    static constexpr std::size_t KEY_BYTES = crypto_aead_xchacha20poly1305_ietf_KEYBYTES;
+    static constexpr std::size_t TAG_BYTES = 16;
+    static constexpr std::size_t NONCE_BYTES = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
+
+    // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
+    // plaintext_len — это чистый размер твоих данных до шифрования.
+    static void encrypt(std::span<uint8_t> payload,
+        size_t plaintext_len,
+        std::span<const uint8_t> key,
+        std::span<const uint8_t> nonce) {
+
+        unsigned long long ciphertext_len;
+
+        // Используем встроенную в libsodium функцию in-place шифрования
+        // Она зашифрует данные прямо в payload.data() и запишет 16 байт тега сразу за ними.
+        crypto_aead_xchacha20poly1305_ietf_encrypt(
+            payload.data(), &ciphertext_len,             // куда писать результат
+            payload.data(), plaintext_len,               // что шифровать (берем из того же буфера)
+            nullptr, 0,                                  // связанные данные (AAD) — не используем
+            nullptr,                                     // nsec (не используется)
+            nonce.data(),                                // одноразовый код
+            key.data()                                   // симметричный ключ
+        );
+    }
+
+    static bool decrypt(std::span<uint8_t> payload,
+        std::span<const uint8_t> key,
+        std::span<const uint8_t> nonce) {
+
+        unsigned long long decrypted_len;
+
+        // Дешифруем прямо по месту. Если пакет подделан, функция вернет код ошибки != 0.
+        int result = crypto_aead_xchacha20poly1305_ietf_decrypt(
+            payload.data(), &decrypted_len,              // куда писать расшифрованный текст
+            nullptr,                                     // nsec (не используется)
+            payload.data(), payload.size(),              // зашифрованные данные вместе с тегом
+            nullptr, 0,                                  // связанные данные
+            nonce.data(),
+            key.data()
+        );
+
+        return (result == 0); // true если целостность подтверждена и данные расшифрованы
     }
 };
 
@@ -131,5 +136,27 @@ private:
 
         return ciphertext;
     }
+
+
+
+
+    struct ZeroCoder {
+        static constexpr std::size_t KEY_BYTES = 0;
+        static constexpr std::size_t TAG_BYTES = 0;
+        static constexpr std::size_t NONCE_BYTES = 0;
+
+        // In-place "шифрование" — ничего не делаем
+        static inline void encrypt(std::span<uint8_t> /*payload*/,
+            std::span<const uint8_t> /*key*/,
+            std::span<const uint8_t> /*nonce*/) noexcept {
+            // Компилятор при -O3 полностью сотрет вызов
+        }
+
+        static inline bool decrypt(std::span<uint8_t> /*payload*/,
+            std::span<const uint8_t> /*key*/,
+            std::span<const uint8_t> /*nonce*/) noexcept {
+            return true; // Всегда успешно
+        }
+    };
 
 };
