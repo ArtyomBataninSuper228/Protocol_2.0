@@ -17,6 +17,7 @@
 struct OQS_Level1 {
     static constexpr const char* alg_name = OQS_KEM_alg_ml_kem_512;
     static constexpr std::size_t pk_size = 800;
+    static constexpr std::size_t sk_size = 1632;
     static constexpr std::size_t ct_size = 768;
     static constexpr std::size_t secret_size = 32;
 };
@@ -24,6 +25,7 @@ struct OQS_Level1 {
 struct OQS_Level3 {
     static constexpr const char* alg_name = OQS_KEM_alg_ml_kem_768;
     static constexpr std::size_t pk_size = 1184;
+    static constexpr std::size_t sk_size = 2400;
     static constexpr std::size_t ct_size = 1088;
     static constexpr std::size_t secret_size = 32;
 };
@@ -31,6 +33,7 @@ struct OQS_Level3 {
 struct OQS_Level5 {
     static constexpr const char* alg_name = OQS_KEM_alg_ml_kem_1024;
     static constexpr std::size_t pk_size = 1568;
+    static constexpr std::size_t sk_size = 3168;
     static constexpr std::size_t ct_size = 1568;
     static constexpr std::size_t secret_size = 32;
 };
