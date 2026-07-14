@@ -50,12 +50,15 @@ private:
     // 0 - initialising, 1 - checking parameters, 2 - starting up listener, 3 - starting up worker, 4 - online, -1 - critical error
     short state = 0;
     std::atomic<bool> is_running = false;
-    // 0 - internet mode without PSK, 1 - local mode, 2 - internet mode with PSK
+    // 0 - local mode, 1 - internet mode without PSK, 2 - internet mode with PSK
     short mode = 0;
 public:
     // Logs
     Logger lgr = Logger(io_context_);
     SymmetricCoder psk_encoder = SymmetricCoder();
+	AsymmetricCoder asym_encoder = AsymmetricCoder();
+	AsymmetricCoder cert_encoder = AsymmetricCoder();
+
     
 
 public:
@@ -176,7 +179,31 @@ public:
 
 private:
     void start_async_receive() {
-        // Тут будет твой async_receive_from
+        unsigned char buffer[1500];
+        std::array<uint8_t, 1500> buffer2;
+        udp::endpoint remote_endpoint;
+        uint16_t len;
+        while (state > 0) {
+            len = socket.receive_from(asio::buffer(buffer2), remote_endpoint);
+
+			switch (mode) {
+			case 0:
+				// Local mode
+				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
+				break;
+			case 1:
+				// Internet mode without PSK
+				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
+				break;
+			case 2:
+				// Internet mode with PSK
+				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
+				break;
+			default:
+				lgr.log(3, "Packet received", "Unknown mode: " + std::to_string(mode));
+				break;
+			}
+        }
     }
 
 };

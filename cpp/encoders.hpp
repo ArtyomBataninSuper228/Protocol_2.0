@@ -7,19 +7,35 @@
 #include <sodium.h>
 #pragma once
 
-struct ChaCha20Poly1305Coder {
+class ChaCha20Poly1305Coder {
 	// Стандартный ключ ChaCha20 - 32 байта
     static constexpr std::size_t KEY_BYTES = crypto_aead_chacha20poly1305_ietf_KEYBYTES;
     // Poly1305 MAC tag всегда 16 байт
     static constexpr std::size_t TAG_BYTES = 16;
     // Стандартный IETF ChaCha20 nonce - 12 байт
     static constexpr std::size_t NONCE_BYTES = 12;
+	bool is_key_set = false;
+    std::array<uint8_t, KEY_BYTES> key;
+public:
+
+	bool set_key(const std::array<uint8_t, KEY_BYTES>& new_key) {
+        if (not is_key_set) {
+			key = new_key;
+        }
+        else:
+        return false;
+	}
+	bool is_key_set_func() const {
+		return is_key_set;
+	}
+    std::array<uint8_t, KEY_BYTES> get_key() const {
+        return key;
+    }
 
     // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
     // plaintext_len — это чистый размер твоих данных до шифрования.
     static void encrypt(std::span<uint8_t> payload,
         size_t plaintext_len,
-        std::span<const uint8_t> key,
         std::span<const uint8_t> nonce) {
 
         unsigned long long ciphertext_len;
@@ -37,7 +53,6 @@ struct ChaCha20Poly1305Coder {
     }
 
     static bool decrypt(std::span<uint8_t> payload,
-        std::span<const uint8_t> key,
         std::span<const uint8_t> nonce) {
 
         unsigned long long decrypted_len;
@@ -56,16 +71,32 @@ struct ChaCha20Poly1305Coder {
     }
 };
 
-struct XChaCha20Poly1305Coder {
+class XChaCha20Poly1305Coder {
     static constexpr std::size_t KEY_BYTES = crypto_aead_xchacha20poly1305_ietf_KEYBYTES;
     static constexpr std::size_t TAG_BYTES = 16;
     static constexpr std::size_t NONCE_BYTES = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
+    bool is_key_set = false;
+    std::array<uint8_t, KEY_BYTES> key;
+public:
+
+    bool set_key(const std::array<uint8_t, KEY_BYTES>& new_key) {
+        if (not is_key_set) {
+            key = new_key;
+        }
+        else:
+        return false;
+    }
+    bool is_key_set_func() const {
+        return is_key_set;
+    }
+    std::array<uint8_t, KEY_BYTES> get_key() const {
+        return key;
+    }
 
     // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
     // plaintext_len — это чистый размер твоих данных до шифрования.
     static void encrypt(std::span<uint8_t> payload,
         size_t plaintext_len,
-        std::span<const uint8_t> key,
         std::span<const uint8_t> nonce) {
 
         unsigned long long ciphertext_len;
@@ -83,7 +114,6 @@ struct XChaCha20Poly1305Coder {
     }
 
     static bool decrypt(std::span<uint8_t> payload,
-        std::span<const uint8_t> key,
         std::span<const uint8_t> nonce) {
 
         unsigned long long decrypted_len;
@@ -140,20 +170,35 @@ private:
 
 
 
-    struct ZeroCoder {
+    class ZeroCoder {
         static constexpr std::size_t KEY_BYTES = 0;
         static constexpr std::size_t TAG_BYTES = 0;
         static constexpr std::size_t NONCE_BYTES = 0;
+        bool is_key_set = false;
+        std::array<uint8_t, KEY_BYTES> key;
+    public:
+
+        bool set_key(const std::array<uint8_t, KEY_BYTES>& new_key) {
+            if (not is_key_set) {
+                key = new_key;
+            }
+            else:
+            return false;
+        }
+        bool is_key_set_func() const {
+            return is_key_set;
+        }
+        std::array<uint8_t, KEY_BYTES> get_key() const {
+            return key;
+        }
 
         // In-place "шифрование" — ничего не делаем
         static inline void encrypt(std::span<uint8_t> /*payload*/,
-            std::span<const uint8_t> /*key*/,
             std::span<const uint8_t> /*nonce*/) noexcept {
             // Компилятор при -O3 полностью сотрет вызов
         }
 
         static inline bool decrypt(std::span<uint8_t> /*payload*/,
-            std::span<const uint8_t> /*key*/,
             std::span<const uint8_t> /*nonce*/) noexcept {
             return true; // Всегда успешно
         }
