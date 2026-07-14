@@ -15,8 +15,6 @@
 #include "asymetric_encoders.hpp"
 #include "hashes.hpp"
 
-
-
 /* The classes below are exported */
 #pragma GCC visibility push(default)
 
@@ -39,6 +37,9 @@ private:
     // Network
     asio::ip::udp::endpoint addr;
     int port_ = 0;
+    std::array<uint8_t, 1500> buffer;
+    asio::ip::udp::endpoint remote_endpoint;
+    uint16_t len;
     
     // Security
     std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> psk_key_;
@@ -90,7 +91,7 @@ public:
         }
     }
 
-    void set_psk(const std::array<uint8_t, SymmetricCoder::keylength>& key) {
+    void set_psk(const std::array<uint8_t, SymmetricCoder::KEY_BYTES>& key) {
         if (state == 0) {
             if (psk_encoder.set_key(key)) {
 				lgr.log(0, "SET_PSK", "PSK set successfully");
@@ -165,7 +166,7 @@ public:
     
         // Фаза 3 и 4: Запуск воркеров и выход в онлайн
         state = 3;
-        start_async_receive();
+        start_receive();
         
         state = 4; // Online!
         lgr.log(0, "Lifecycle", "Server is now ONLINE");
@@ -178,31 +179,24 @@ public:
     }
 
 private:
-    void start_async_receive() {
-        unsigned char buffer[1500];
-        std::array<uint8_t, 1500> buffer2;
-        udp::endpoint remote_endpoint;
-        uint16_t len;
-        while (state > 0) {
-            len = socket.receive_from(asio::buffer(buffer2), remote_endpoint);
+    asio::awaitable<void> start_receive() {
+        try {
+            // Твой асинхронный цикл while
+            while (true) {
+                // co_await «замораживает» корутину, пока не придут данные. Поток при этом не блокируется!
+                len = co_await socket_.async_receive_from(
+                    asio::buffer(buffer),
+                    remote_endpoint,
+                    asio::use_awaitable // Указываем standalone Asio использовать корутины
+                );
 
-			switch (mode) {
-			case 0:
-				// Local mode
-				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
-				break;
-			case 1:
-				// Internet mode without PSK
-				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
-				break;
-			case 2:
-				// Internet mode with PSK
-				lgr.log(0, "Packet received", "Received packet of length " + std::to_string(len) + " from " + remote_endpoint.address().to_string());
-				break;
-			default:
-				lgr.log(3, "Packet received", "Unknown mode: " + std::to_string(mode));
-				break;
-			}
+                // Ошибки нет, работаем с данными напрямую
+                lgr.log(0, "reciever",   "DATa");
+            }
+        }
+        catch (const std::system_error& e) {
+            // В standalone Asio все ошибки сети летят как стандартные std::system_error
+            std::cerr << "Сеть отвалилась или сокет закрыт: " << e.what() << "\n";
         }
     }
 

@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(MyProtocolCore CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)       # Включает строгий режим, убирая "грязные" расширения
 
 # 1. Настраиваем пути поиска для Apple/Homebrew
 if(APPLE)

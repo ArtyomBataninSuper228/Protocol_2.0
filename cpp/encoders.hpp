@@ -8,22 +8,27 @@
 #pragma once
 
 class ChaCha20Poly1305Coder {
+public:
 	// Стандартный ключ ChaCha20 - 32 байта
     static constexpr std::size_t KEY_BYTES = crypto_aead_chacha20poly1305_ietf_KEYBYTES;
     // Poly1305 MAC tag всегда 16 байт
     static constexpr std::size_t TAG_BYTES = 16;
     // Стандартный IETF ChaCha20 nonce - 12 байт
     static constexpr std::size_t NONCE_BYTES = 12;
+private:
 	bool is_key_set = false;
     std::array<uint8_t, KEY_BYTES> key;
 public:
 
 	bool set_key(const std::array<uint8_t, KEY_BYTES>& new_key) {
-        if (not is_key_set) {
+        if (!is_key_set) {
 			key = new_key;
+			return true;
         }
-        else:
-        return false;
+        else {
+            return false;
+        }
+        
 	}
 	bool is_key_set_func() const {
 		return is_key_set;
@@ -31,10 +36,18 @@ public:
     std::array<uint8_t, KEY_BYTES> get_key() const {
         return key;
     }
+	bool generate_key() {
+		if (!is_key_set) {
+			randombytes_buf(key.data(), KEY_BYTES);
+			is_key_set = true;
+			return true;
+		}
+		return false;
+	}
 
     // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
     // plaintext_len — это чистый размер твоих данных до шифрования.
-    static void encrypt(std::span<uint8_t> payload,
+    void encrypt(std::span<uint8_t> payload,
         size_t plaintext_len,
         std::span<const uint8_t> nonce) {
 
@@ -52,7 +65,7 @@ public:
         );
     }
 
-    static bool decrypt(std::span<uint8_t> payload,
+    bool decrypt(std::span<uint8_t> payload,
         std::span<const uint8_t> nonce) {
 
         unsigned long long decrypted_len;
@@ -72,9 +85,11 @@ public:
 };
 
 class XChaCha20Poly1305Coder {
+public:
     static constexpr std::size_t KEY_BYTES = crypto_aead_xchacha20poly1305_ietf_KEYBYTES;
     static constexpr std::size_t TAG_BYTES = 16;
     static constexpr std::size_t NONCE_BYTES = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
+private:
     bool is_key_set = false;
     std::array<uint8_t, KEY_BYTES> key;
 public:
@@ -82,9 +97,12 @@ public:
     bool set_key(const std::array<uint8_t, KEY_BYTES>& new_key) {
         if (not is_key_set) {
             key = new_key;
+			return true;
         }
-        else:
-        return false;
+        else {
+            return false;
+        }
+        
     }
     bool is_key_set_func() const {
         return is_key_set;
@@ -92,10 +110,18 @@ public:
     std::array<uint8_t, KEY_BYTES> get_key() const {
         return key;
     }
+    bool generate_key() {
+        if (!is_key_set) {
+            randombytes_buf(key.data(), KEY_BYTES);
+            is_key_set = true;
+            return true;
+        }
+        return false;
+    }
 
     // encrypt ожидает, что размер payload достаточен для записи данных + 16 байт тега в конец.
     // plaintext_len — это чистый размер твоих данных до шифрования.
-    static void encrypt(std::span<uint8_t> payload,
+    void encrypt(std::span<uint8_t> payload,
         size_t plaintext_len,
         std::span<const uint8_t> nonce) {
 
@@ -113,7 +139,7 @@ public:
         );
     }
 
-    static bool decrypt(std::span<uint8_t> payload,
+    bool decrypt(std::span<uint8_t> payload,
         std::span<const uint8_t> nonce) {
 
         unsigned long long decrypted_len;
@@ -182,8 +208,10 @@ private:
             if (not is_key_set) {
                 key = new_key;
             }
-            else:
-            return false;
+            else {
+                return false;
+            }
+            return true;
         }
         bool is_key_set_func() const {
             return is_key_set;
