@@ -166,10 +166,14 @@ public:
     
         // Фаза 3 и 4: Запуск воркеров и выход в онлайн
         state = 3;
-        start_receive();
+        asio::co_spawn(
+            socket_.get_executor(),
+            start_receive(), // вызываем функцию, передавая её результат в spawn
+            asio::detached
+        );
         
         state = 4; // Online!
-        lgr.log(0, "Lifecycle", "Server is now ONLINE");
+        lgr.log(0, "Lifecycle", "Server is now ONLINE 228");
         return true;
     }
     void stop_server(){
@@ -182,7 +186,8 @@ private:
     asio::awaitable<void> start_receive() {
         try {
             // Твой асинхронный цикл while
-            while (true) {
+            lgr.log(0, "Reciever", "Starting receive loop");
+            while (mode > 0) {
                 // co_await «замораживает» корутину, пока не придут данные. Поток при этом не блокируется!
                 len = co_await socket_.async_receive_from(
                     asio::buffer(buffer),
@@ -191,7 +196,7 @@ private:
                 );
 
                 // Ошибки нет, работаем с данными напрямую
-                lgr.log(0, "reciever",   "DATa");
+                //lgr.log(0, "reciever",   "DATa");
             }
         }
         catch (const std::system_error& e) {
