@@ -53,6 +53,7 @@ private:
     std::atomic<bool> is_running = false;
     // 0 - local mode, 1 - internet mode without PSK, 2 - internet mode with PSK
     short mode = 0;
+	Hasher hasher = Hasher();
 public:
     // Logs
     Logger lgr = Logger(io_context_);
@@ -134,7 +135,7 @@ public:
     bool run() {
         if (state == -1) return false;
 
-        // FURST CHECK
+        // FIRST CHECK
         // Фаза 1: Проверка параметров
         state = 1;
         if (port_ <= 0 || port_ > 65535) {
@@ -166,14 +167,12 @@ public:
     
         // Фаза 3 и 4: Запуск воркеров и выход в онлайн
         state = 3;
-        asio::co_spawn(
-            socket_.get_executor(),
-            start_receive(), // вызываем функцию, передавая её результат в spawn
-            asio::detached
-        );
-        
+		std::thread reciever = std::thread([this]() {
+			this->start_receive();
+			});
+		reciever.detach();
         state = 4; // Online!
-        lgr.log(0, "Lifecycle", "Server is now ONLINE 228");
+        lgr.log(0, "Lifecycle", "Server is now ONLINE");
         return true;
     }
     void stop_server(){
@@ -183,27 +182,56 @@ public:
     }
 
 private:
-    asio::awaitable<void> start_receive() {
+    void start_receive() {
         try {
-            // Твой асинхронный цикл while
             lgr.log(0, "Reciever", "Starting receive loop");
-            while (mode > 0) {
+            while (state > 0) {
+                /*
                 // co_await «замораживает» корутину, пока не придут данные. Поток при этом не блокируется!
-                len = co_await socket_.async_receive_from(
+                len = socket.receive_from(
                     asio::buffer(buffer),
                     remote_endpoint,
                     asio::use_awaitable // Указываем standalone Asio использовать корутины
                 );
+                */
+                len = this->socket_.receive_from(asio::buffer(buffer), remote_endpoint);
+                switch (mode)
+                {
+                case 0:
+                    {
+                        if (len < 2*hasher.HASH_SIZE) {
+                            //lgr.log(0, "Reciever", "Received data is too short to contain a hash. Length: " + std::to_string(len));
+                            break;
+                        }
+                        auto data_hash = hasher.hash_single(buffer.data(), len - hasher.HASH_SIZE);
+                        if (sodium_memcmp(data_hash.data(), buffer.data() + (len - Hasher::HASH_SIZE), Hasher::HASH_SIZE) != 0) {
+                            //lgr.log(3, "Reciever", "Hash mismatch! Data integrity check failed.");
+                            break;
+                        }
+                        
 
-                // Ошибки нет, работаем с данными напрямую
-                //lgr.log(0, "reciever",   "DATa");
+                        break;
+                    }
+				case 1:
+					lgr.log(0, "Reciever", "Received data from " + remote_endpoint.address().to_string() + ":" + std::to_string(remote_endpoint.port()) + ", length: " + std::to_string(len) + std::to_string(Hasher::HASH_SIZE));
+					// Здесь можно добавить обработку данных в режиме 1
+					break;
+				case 2:
+					lgr.log(0, "Reciever", "Received data from " + remote_endpoint.address().to_string() + ":" + std::to_string(remote_endpoint.port()) + ", length: " + std::to_string(len));
+					// Здесь можно добавить обработку данных в режиме 2
+					break;
+                default:
+                    break;
+                }
+
             }
         }
-        catch (const std::system_error& e) {
-            // В standalone Asio все ошибки сети летят как стандартные std::system_error
-            std::cerr << "Сеть отвалилась или сокет закрыт: " << e.what() << "\n";
+            catch (const std::system_error& e) {
+                // В standalone Asio все ошибки сети летят как стандартные std::system_error
+                lgr.log(3, "Reciever",  e.what());
+            }
         }
-    }
+    
 
 };
 

@@ -43,6 +43,20 @@ public:
 
         return out_hash;
     }
+    static HashBuf hash_single(const uint8_t* data, size_t size) {
+        HashBuf out_hash;
+
+        if constexpr (std::is_same_v<T, Trait_BLAKE2b>) {
+            crypto_generichash(out_hash.data(), out_hash.size(),
+                data, size,
+                nullptr, 0); // Без ключа
+        }
+        else if constexpr (std::is_same_v<T, Trait_SHA256>) {
+            crypto_hash_sha256(out_hash.data(), data, size);
+        }
+
+        return out_hash;
+    }
 
     // 2. Потоковое хэширование (Multi-part для логов хэндшейка)
     class Stream {

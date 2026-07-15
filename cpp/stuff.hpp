@@ -201,7 +201,8 @@ public:
                 file << json_data;
                 file.close();
                 // Выводим системное уведомление (минуя мьютекс логгера, напрямую в консоль)
-                std::cout << "[Logger] Логи успешно сохранены в файл: " << target_file << std::endl;
+                this->log(0, "Logger",  std::string("Логи успешно сохранены в файл: ") + target_file);
+
             } else {
                 std::cerr << "[Logger] КРИТИЧЕСКАЯ ОШИБКА: Не удалось открыть файл для записи логов!" << std::endl;
             }
@@ -212,6 +213,7 @@ public:
         
         timer_.async_wait([this, interval_seconds, filename](const std::error_code& ec) mutable {
             if (!is_saving_) {
+                
                 std::cout << "[Logger] Асинхронное автосохранение успешно остановлено." << std::endl;
                 return;
             }

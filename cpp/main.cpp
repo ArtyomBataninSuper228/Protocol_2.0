@@ -50,14 +50,15 @@ int main() {
         asio::io_context io_context;
 		using myserver = Server<XChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Connection, Connection, Connection>;
         Server s = myserver(io_context);
-        s.set_mode(2);
+        s.set_mode(0);
 		s.psk_encoder.generate_key();
         s.set_port(8080);
         s.lgr.set_printlevel(0);
-        s.lgr.set_loglevel(0);
+        s.lgr.set_loglevel(1);
+        s.lgr.set_printlevel(1);
         s.lgr.start_autosave(1);
         asio::steady_timer timer = asio::steady_timer(io_context);
-        stop_autosave(s.lgr, 30, timer);
+        //stop_autosave(s.lgr, 30, timer);
         if (s.run()) {
                     std::cout << "Запускаем цикл Asio..." << std::endl;
                     io_context.run();
