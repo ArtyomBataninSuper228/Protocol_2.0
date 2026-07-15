@@ -52,8 +52,9 @@ private:
     short state = 0;
     std::atomic<bool> is_running = false;
     // 0 - local mode, 1 - internet mode without PSK, 2 - internet mode with PSK
-    short mode = 0;
+    std::atomic<short> mode = 0;
 	Hasher hasher = Hasher();
+	std::thread reciever;
 public:
     // Logs
     Logger lgr = Logger(io_context_);
@@ -133,7 +134,7 @@ public:
 
 
     bool run() {
-        if (state == -1) return false;
+        if (state <0) return false;
 
         // FIRST CHECK
         // Фаза 1: Проверка параметров
@@ -167,7 +168,7 @@ public:
     
         // Фаза 3 и 4: Запуск воркеров и выход в онлайн
         state = 3;
-		std::thread reciever = std::thread([this]() {
+		reciever = std::thread([this]() {
 			this->start_receive();
 			});
 		reciever.detach();
@@ -176,16 +177,21 @@ public:
         return true;
     }
     void stop_server(){
-        lgr.stop_autosave();
+        state = -1;
         is_running = false;
-        state = 1001;
+        this->socket_.close();
+        lgr.stop_autosave();
+		reciever.join();
+		state = 0;
+        
+        
     }
 
 private:
     void start_receive() {
         try {
             lgr.log(0, "Reciever", "Starting receive loop");
-            while (state > 0) {
+            while (is_running) {
                 /*
                 // co_await «замораживает» корутину, пока не придут данные. Поток при этом не блокируется!
                 len = socket.receive_from(
@@ -195,6 +201,10 @@ private:
                 );
                 */
                 len = this->socket_.receive_from(asio::buffer(buffer), remote_endpoint);
+                if (len < 0) {
+					lgr.log(3, "Reciever", "Socket is closed");
+                    break;
+                }
                 switch (mode)
                 {
                 case 0:
