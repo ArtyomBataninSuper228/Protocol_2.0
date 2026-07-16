@@ -67,9 +67,9 @@ int main() {
 		t.detach();
         while (1) {
             std::cout<< "Pacets: " << s.num << std::endl;
-            Sleep(2000);
+            sleep(2);
         }
-        Sleep(30000);
+        sleep(30000);
 		s.stop_server();
         
     } catch (std::exception& e) {

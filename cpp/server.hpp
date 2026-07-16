@@ -212,7 +212,7 @@ private:
                     break;
                 }
                 num += 1;
-                switch (mode)
+                switch (mode.load())
                 {
                 case 0:
                     {
