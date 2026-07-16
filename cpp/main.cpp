@@ -57,15 +57,19 @@ int main() {
 		s.psk_encoder.generate_key();
         s.set_port(8080);
         s.lgr.set_printlevel(0);
-        s.lgr.set_loglevel(0);
-        s.lgr.set_printlevel(0);
+        s.lgr.set_loglevel(1);
+        s.lgr.set_printlevel(1);
         s.lgr.start_autosave(1);
         asio::steady_timer timer = asio::steady_timer(io_context);
         //stop_autosave(s.lgr, 30, timer);
 		s.run();
 		std::thread t = std::thread(run_context, std::ref(io_context));
 		t.detach();
-        Sleep(3000);
+        while (1) {
+            std::cout<< "Pacets: " << s.num << std::endl;
+            Sleep(2000);
+        }
+        Sleep(30000);
 		s.stop_server();
         
     } catch (std::exception& e) {

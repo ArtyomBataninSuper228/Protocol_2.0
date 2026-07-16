@@ -20,8 +20,11 @@
 
 
 
-
+//template<typename SymmetricCoder, typename AsymmetricCoder, typename Hasher, typename Session, typename Session_Handler>
 class Connection{
+    // ASIO - инициализируем ссылку в конструкторе, сокет пока просто привязываем к контексту
+    asio::io_context& io_context_;
+    asio::ip::udp::socket socket_;
     
     
 };
@@ -40,6 +43,7 @@ private:
     std::array<uint8_t, 1500> buffer;
     asio::ip::udp::endpoint remote_endpoint;
     uint16_t len;
+    
     
     // Security
     std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> psk_key_;
@@ -61,6 +65,7 @@ public:
     SymmetricCoder psk_encoder = SymmetricCoder();
 	AsymmetricCoder asym_encoder = AsymmetricCoder();
 	AsymmetricCoder cert_encoder = AsymmetricCoder();
+    std::atomic<size_t> num = 0;
 
     
 
@@ -168,6 +173,7 @@ public:
     
         // Фаза 3 и 4: Запуск воркеров и выход в онлайн
         state = 3;
+		is_running = true;
 		reciever = std::thread([this]() {
 			this->start_receive();
 			});
@@ -205,11 +211,12 @@ private:
 					lgr.log(3, "Reciever", "Socket is closed");
                     break;
                 }
+                num += 1;
                 switch (mode)
                 {
                 case 0:
                     {
-                        if (len < 2*hasher.HASH_SIZE) {
+                        if (len < 2*hasher.HASH_SIZE or len > 1500) {
                             //lgr.log(0, "Reciever", "Received data is too short to contain a hash. Length: " + std::to_string(len));
                             break;
                         }
