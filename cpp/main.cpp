@@ -5,11 +5,18 @@
 #include <sodium.h>
 #include <oqs/oqs.h>
 #include "server.hpp"
+#include "client.hpp"
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
 using asio::ip::udp;
+
+using conn = Connection<ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Alvays_True_Access_Control<OqsEncoder<OQS_Level5>>, Zero_Class, Zero_Class>;
+using myserver = Server<conn, ChaCha20Poly1305Coder, ChaCha20Poly1305Coder, UniversalHasher<Trait_BLAKE2b>>;
+
+using myclient = Client< XChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>>;
+
 /*
 🍺
 🍺🍺
@@ -43,6 +50,13 @@ void run_context(asio::io_context& io_context) {
 	io_context.run();
 }
 
+void printer2(myserver &s){
+    while (1) {
+        std::cout<< "Pacets: " << s.num << std::endl;
+        sleep(2);
+    }
+}
+
 
 int main() {
 #ifdef _WIN32
@@ -51,8 +65,7 @@ int main() {
 #endif
     try {
         asio::io_context io_context;
-        using conn = Connection<ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Alvays_True_Access_Control<OqsEncoder<OQS_Level5>>, Zero_Class, Zero_Class>;
-		using myserver = Server<conn, ChaCha20Poly1305Coder, ChaCha20Poly1305Coder, UniversalHasher<Trait_BLAKE2b>>;
+        
         Server s = myserver(io_context);
         s.set_mode(0);
 		s.psk_encoder.generate_key();
@@ -60,16 +73,23 @@ int main() {
         s.lgr.set_printlevel(0);
         s.lgr.set_loglevel(1);
         s.lgr.set_printlevel(1);
+        s.lgr.global_preset = "Server";
         s.lgr.start_autosave(1);
         asio::steady_timer timer = asio::steady_timer(io_context);
         //stop_autosave(s.lgr, 30, timer);
 		s.run();
 		std::thread t = std::thread(run_context, std::ref(io_context));
 		t.detach();
-        while (1) {
-            std::cout<< "Pacets: " << s.num << std::endl;
-            sleep(2);
-        }
+        std::thread t2 = std::thread(printer2,std::ref(s));
+        t2.detach();
+        
+        Client c = myclient(io_context, 8080, "127.0.0.1");
+        c.lgr.global_preset = "Client";
+        c.connect();
+        sleep(1000);
+        c.close();
+
+        
         sleep(30000);
 		s.stop_server();
         

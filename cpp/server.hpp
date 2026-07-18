@@ -15,7 +15,7 @@
 #include "asymetric_encoders.hpp"
 #include "hashes.hpp"
 #include "access_control.hpp"
-
+#pragma once
 /* The classes below are exported */
 #pragma GCC visibility push(default)
 
@@ -25,9 +25,6 @@ class Connection{
     // ASIO - инициализируем ссылку в конструкторе, сокет пока просто привязываем к контексту
     asio::io_context& io_context_;
     asio::ip::udp::socket socket_;
-    
-    
-   
 };
 
 
@@ -122,12 +119,13 @@ public:
 
     // Загрузка готового постквантового сертификата
     bool set_pq_certificate(const std::vector<uint8_t>& public_key, const std::vector<uint8_t>& private_key) {
-        if (state == 0) {
-            return Certificate.set_keys(public_key, private_key);
-        }
-        else{
-            return false;
-        }
+        if (public_key.size() != AsymmetricCoder::PUBLIC_KEY_SIZE ||
+            private_key.size() != AsymmetricCoder::PRIVATE_KEY_SIZE) return false;
+        typename AsymmetricCoder::PublicKeyBuf pk;
+        typename AsymmetricCoder::PrivateKeyBuf sk;
+        std::copy(public_key.begin(), public_key.end(), pk.begin());
+        std::copy(private_key.begin(), private_key.end(), sk.begin());
+        return Certificate.set_keys(pk, sk);
     }
 
     // Или метод автоматической генерации ключей, если сертификата нет
@@ -214,12 +212,12 @@ private:
                 case 0:
                     {
                         if (len < 2*hasher.HASH_SIZE or len > 1500) {
-                            //lgr.log(0, "Reciever", "Received data is too short to contain a hash. Length: " + std::to_string(len));
+                            lgr.log(3, "Reciever", "Received data is too short to contain a hash. Length: " + std::to_string(len));
                             break;
                         }
                         auto data_hash = hasher.hash_single(buffer.data(), len - hasher.HASH_SIZE);
                         if (sodium_memcmp(data_hash.data(), buffer.data() + (len - Hasher::HASH_SIZE), Hasher::HASH_SIZE) != 0) {
-                            //lgr.log(3, "Reciever", "Hash mismatch! Data integrity check failed.");
+                            lgr.log(3, "Reciever", "Hash mismatch! Data integrity check failed.");
                             break;
                         }
                         

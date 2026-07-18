@@ -3,7 +3,7 @@ import socket
 import secrets
 import hashlib
 import time
-
+# ˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔˔
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 500*1024*1024)
 
@@ -14,12 +14,12 @@ def send(msg, to):
     msg += hasher.digest()
     msg = bytes(msg)
     s.sendto(msg, to)
-dt = 1/100000
+dt = 1/2500
 ts = time.time_ns()
 ns = 10**9
 b = r_f.read(1500)
 r_f.close()
-for i in range(1000000):
+for i in range(10):
     send(b, ("127.0.0.1", 8080))
     #print(len(b))
     ts += dt*ns

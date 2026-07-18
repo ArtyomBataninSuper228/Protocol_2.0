@@ -22,10 +22,63 @@
 #include <iostream>
 #include <fstream>
 #include <asio.hpp>
+#include <thread>
+
+// Для интринсиков x86/x64
+#if defined(_MSC_VER) || defined(__i386__) || defined(__x86_64__)
+    #include <immintrin.h>
+    #define HARDWARE_PAUSE() _mm_pause()
+#elif defined(__aarch64__) || defined(__arm__)
+    // Для ARM (например, Raspberry Pi или Apple Silicon)
+    #define HARDWARE_PAUSE() asm volatile("yield" ::: "memory") // ARM 'yield' instruction, not OS yield!
+#else
+    #define HARDWARE_PAUSE() do {} while(0)
+#endif
+
+using namespace std::chrono_literals;
+
+#if defined(_WIN32)
+    // В Windows стандартный квант времени/шаг таймера составляет 15.625 мс
+    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 15625000ns;
+
+#elif defined(__linux__)
+    // В Linux базовое минимальное квантование (min granularity) обычно около 3 мс
+    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 3000000ns;
+
+#elif defined(__APPLE__)
+    // В macOS/iOS стандартный шаг планировщика чаще всего равен 10 мс
+    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 10000000ns;
+
+#else
+    // Значение по умолчанию для остальных ОС (10 мс)
+    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 10000000ns;
+#endif
+
+
+
 
 #pragma once
 
 #pragma GCC visibility push(default)
+using ns = std::chrono::nanoseconds;
+
+inline void precise_pacing_sleep(std::chrono::nanoseconds duration) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto target = start + duration;
+
+    // 1. Грубый сон через ОС (ТОЛЬКО если ждать реально долго, например > 2 мс)
+    // В активном потоке отправки этот блок может вообще никогда не срабатывать
+    auto bulk_time = duration - std::chrono::milliseconds(2);
+    if (bulk_time.count() > 0) {
+        std::this_thread::sleep_for(bulk_time);
+    }
+
+    // 2. Сверхточный Spin-wait с аппаратной паузой.
+    // ОС не вмешивается, квант времени не отдается!
+    while (std::chrono::high_resolution_clock::now() < target) {
+        HARDWARE_PAUSE();
+    }
+}
 
 // ============================================================================
 // БЛОК ФУНКЦИЙ CRC32
@@ -104,6 +157,7 @@ struct LogEntry{
     std::string time_str;
     std::string place;
     std::string text;
+    std::string global_preset;
     
     std::string to_json() const {
             nlohmann::json j;
@@ -112,7 +166,8 @@ struct LogEntry{
             j["timestamp_ns"] = timestamp_ns;
             j["time"] = time_str;
             j["place"] = place;
-            j["text"] = text; // Если тут будут кавычки или \n, библиотека сама их заэкранирует!
+            j["text"] = text;// Если тут будут кавычки или \n, библиотека сама их заэкранирует!
+        j["global_preset"] = global_preset;
 
             // j.dump() — это полный аналог json.dumps(j) в Python
             return j.dump();
@@ -127,9 +182,12 @@ private:
     int next_id_ = 0;
     std::mutex mutex_;
     asio::steady_timer timer_;
+    
     std::atomic<bool> is_saving_{false};
 
 public:
+    std::string global_preset = "";
+    
     Logger(asio::io_context& io, size_t loglength = 10000)
             : loglength_(loglength), timer_(io) {}
 
@@ -158,7 +216,8 @@ public:
                         case 4: level_str = "Critical";  break;
                         default: break;
                     }
-            std::cout << "{" << ctime_raw << "} " << "[" << place << "] " <<  "|" << level_str << "| " << text << std::endl;
+            
+            std::cout << "{" << ctime_raw << "} " << "[" <<global_preset<< ": " << place << "] " <<  "|" << level_str << "| " << text << std::endl;
         }
         
     }
@@ -242,9 +301,7 @@ public:
 // БЛОК СТРУКТУР И КЛАССОВ ДЛЯ СЕТЕВОГО СОЕДИНЕНИЯ
 // ============================================================================
 
-struct NetworkPacket {
-    std::vector<uint8_t> data;
-};
+
 
 struct SessionCryptoStorage {
     std::array<uint8_t, 32> chacha_key = {0};
@@ -258,28 +315,93 @@ struct SessionCryptoStorage {
     }
 };
 
+struct NetworkPacket {
+    std::vector<uint8_t> data;
+    std::chrono::nanoseconds timestamp;
+    bool operator<(const NetworkPacket& other) const {
+            // Меняем логику: текущий пакет "меньше" (хуже),
+            // если его время БОЛЬШЕ времени другого пакета, что бы priority_queue первым отдавала элемент с наименьшим временем отправки.
+            return timestamp > other.timestamp;
+        }
+};
+
 
 class ThreadSafeQueue {
 private:
-    std::queue<NetworkPacket> raw_queue;
+    std::priority_queue<NetworkPacket> raw_queue;
     std::mutex mtx;
     std::condition_variable cv;
+    std::atomic<std::chrono::nanoseconds::rep> next_target{
+            std::chrono::nanoseconds::max().count()
+        };
+    std::atomic<bool> stopped{false};
 
-public:
-    void push(NetworkPacket pkt) {
-        std::lock_guard<std::mutex> lock(mtx);
-        raw_queue.push(std::move(pkt));
-        cv.notify_one();
-    }
+    public:
+    void stop() {
+            stopped.store(true, std::memory_order_release);
+            cv.notify_all(); // будим всех, кто спит в cv.wait / wait_until
+        }
+        void push(NetworkPacket pkt) {
+            auto t = pkt.timestamp.count();
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                raw_queue.push(std::move(pkt));
+            }
+            auto cur = next_target.load(std::memory_order_relaxed);
+            while (t < cur && !next_target.compare_exchange_weak(
+                       cur, t, std::memory_order_relaxed)) {}
+            cv.notify_one();
+        }
 
     bool pop(NetworkPacket& out_pkt) {
-        std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [this]() { return !raw_queue.empty(); });
-        
-        out_pkt = std::move(raw_queue.front());
-        raw_queue.pop();
-        return true;
-    }
+            std::unique_lock<std::mutex> lock(mtx, std::defer_lock);
+
+            while (true) {
+                lock.lock();
+
+                if (stopped.load(std::memory_order_acquire)) {
+                    return false; // сигнал остановки — выходим сразу
+                }
+
+                if (raw_queue.empty()) {
+                    cv.wait(lock, [this] {
+                        return !raw_queue.empty() || stopped.load(std::memory_order_acquire);
+                    });
+                    if (stopped.load(std::memory_order_acquire)) {
+                        return false;
+                    }
+                }
+
+                auto now = std::chrono::steady_clock::now().time_since_epoch();
+                auto target = raw_queue.top().timestamp;
+
+                if (target <= now) {
+                    out_pkt = std::move(const_cast<NetworkPacket&>(raw_queue.top()));
+                    raw_queue.pop();
+                    return true;
+                }
+
+                auto remaining = target - now;
+
+                if (remaining > SPIN_THRESHOLD) {
+                    cv.wait_until(lock, std::chrono::steady_clock::now() + (remaining - SPIN_THRESHOLD));
+                    lock.unlock();
+                    continue; // проверит stopped в начале следующей итерации
+                }
+
+                lock.unlock();
+
+                while (true) {
+                    if (stopped.load(std::memory_order_acquire)) {
+                        return false; // выход из spin-фазы по флагу
+                    }
+                    now = std::chrono::steady_clock::now().time_since_epoch();
+                    if (now >= target) break;
+                    HARDWARE_PAUSE();
+                }
+            }
+        }
+            
 };
 
 class Zero_Class{

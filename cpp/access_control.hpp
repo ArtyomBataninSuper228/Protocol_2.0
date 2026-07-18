@@ -28,7 +28,7 @@ class Base_Access_Controller{
     
     std::atomic<std::shared_ptr<const std::unordered_set<Key, KeyHash>>> snapshot;
     std::mutex write_mutex;
-    using Snapshot = std::unordered_set<std::unordered_set<Key, KeyHash>>;
+    using Snapshot = std::unordered_set<Key, KeyHash>;
     
 public:
     bool is_allowed(const Key& key) const noexcept{

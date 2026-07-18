@@ -18,10 +18,12 @@ struct Trait_SHA256 {
     static constexpr std::size_t hash_size = crypto_hash_sha256_BYTES;
     static constexpr const char* name = "SHA-256";
 };
+/*
 struct Trait_CRC32 {
     static constexpr std::size_t hash_size = 4; // 32 бита = 4 байта
     static constexpr const char* name = "CRC32";
 };
+ */
 
 
 
