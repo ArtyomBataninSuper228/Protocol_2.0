@@ -14,24 +14,30 @@
 #include "encoders.hpp"
 #include "asymetric_encoders.hpp"
 #include "hashes.hpp"
+#include "access_control.hpp"
 
 /* The classes below are exported */
 #pragma GCC visibility push(default)
 
 
-
-//template<typename SymmetricCoder, typename AsymmetricCoder, typename Hasher, typename Session, typename Session_Handler>
+template<typename SymmetricCoder, typename AsymmetricCoder, typename Hasher, typename AccessController, typename Session, typename Session_Handler>
 class Connection{
     // ASIO - инициализируем ссылку в конструкторе, сокет пока просто привязываем к контексту
     asio::io_context& io_context_;
     asio::ip::udp::socket socket_;
     
     
+   
 };
 
-template<typename SymmetricCoder, typename AsymmetricCoder, typename Hasher, typename Connection, typename Session, typename Session_Handler>
+
+template<typename Connection, typename SymmetricCoder, typename AsymmetricCoder, typename Hasher>
 class Server {
 private:
+    
+    //using SymmetricCoder = Connection::SymmetricCoder;
+    //using AsymmetricCoder = Connection::AsymmetricCoder;
+    //using Hasher = Connection::Hasher;
     
     // ASIO - инициализируем ссылку в конструкторе, сокет пока просто привязываем к контексту
     asio::io_context& io_context_;
@@ -47,9 +53,10 @@ private:
     
     // Security
     std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> psk_key_;
-    std::vector<uint8_t> crypto_data{};
-    std::vector<uint8_t> cert_public_key_{};
-    std::vector<uint8_t> cert_private_key_{};
+    AsymmetricCoder Certificate;
+    //std::vector<uint8_t> crypto_data{};
+    //std::vector<uint8_t> cert_public_key_{};
+    //std::vector<uint8_t> cert_private_key_{};
 	
     // Logic
     // 0 - initialising, 1 - checking parameters, 2 - starting up listener, 3 - starting up worker, 4 - online, -1 - critical error
@@ -114,29 +121,19 @@ public:
 
 
     // Загрузка готового постквантового сертификата
-    void set_pq_certificate(const std::vector<uint8_t>& public_key, const std::vector<uint8_t>& private_key) {
+    bool set_pq_certificate(const std::vector<uint8_t>& public_key, const std::vector<uint8_t>& private_key) {
         if (state == 0) {
-            cert_public_key_ = public_key;
-            cert_private_key_ = private_key;
+            return Certificate.set_keys(public_key, private_key);
+        }
+        else{
+            return false;
         }
     }
 
     // Или метод автоматической генерации ключей, если сертификата нет
-    void generate_pq_certificate() {
-        OQS_SIG* sig = OQS_SIG_new(OQS_SIG_alg_ml_dsa_65);
-        if (!sig) {
-            state = -1;
-            lgr.log(4, "PQ Certificate generator", "Not sig");
-            return;
-        }
-        cert_public_key_.resize(sig->length_public_key);
-        cert_private_key_.resize(sig->length_secret_key);
-        
-        OQS_SIG_keypair(sig, cert_public_key_.data(), cert_private_key_.data());
-        OQS_SIG_free(sig);
+    bool generate_pq_certificate() {
+        return Certificate.generate_keypair();
     }
-
-
 
     bool run() {
         if (state <0) return false;
@@ -179,7 +176,7 @@ public:
 			});
 		reciever.detach();
         state = 4; // Online!
-        lgr.log(0, "Lifecycle", "Server is now ONLINE");
+        lgr.log(1, "Lifecycle", "Server is now ONLINE");
         return true;
     }
     void stop_server(){

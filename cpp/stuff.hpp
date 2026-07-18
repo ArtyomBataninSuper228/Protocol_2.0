@@ -83,11 +83,10 @@ inline uint32_t crc32(const char *buf, size_t start, size_t end) {
 }
 
 
+
 struct Crc32Hasher {
-    // Делаем оператор шаблонным, чтобы он переваривал std::array ЛЮБОГО размера!
     template <std::size_t N>
     uint32_t operator()(const std::array<uint8_t, N>& p) const {
-
         return crc32(p);
     }
 };
@@ -281,6 +280,10 @@ public:
         raw_queue.pop();
         return true;
     }
+};
+
+class Zero_Class{
+    
 };
 
 #pragma GCC visibility pop

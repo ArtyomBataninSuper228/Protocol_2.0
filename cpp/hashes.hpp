@@ -1,15 +1,18 @@
+
+#ifndef hashes_
+#define hashes_
 #pragma once
 #include <array>
 #include <vector>
 #include <cstdint>
-#include <sodium.h> // Для BLAKE2b и SHA-256
+#include <sodium.h>
 
+#pragma GCC visibility push(default)
 // Трейт для BLAKE2b (libsodium)
 struct Trait_BLAKE2b {
     static constexpr std::size_t hash_size = crypto_generichash_BYTES;
     static constexpr const char* name = "BLAKE2b";
 };
-
 // Трейт для SHA-256 (libsodium)
 struct Trait_SHA256 {
     static constexpr std::size_t hash_size = crypto_hash_sha256_BYTES;
@@ -87,3 +90,7 @@ public:
         }
     };
 };
+
+#pragma GCC visibility pop
+#endif
+

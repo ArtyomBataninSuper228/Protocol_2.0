@@ -51,7 +51,8 @@ int main() {
 #endif
     try {
         asio::io_context io_context;
-		using myserver = Server<XChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Connection, Connection, Connection>;
+        using conn = Connection<ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Alvays_True_Access_Control<OqsEncoder<OQS_Level5>>, Zero_Class, Zero_Class>;
+		using myserver = Server<conn, ChaCha20Poly1305Coder, ChaCha20Poly1305Coder, UniversalHasher<Trait_BLAKE2b>>;
         Server s = myserver(io_context);
         s.set_mode(0);
 		s.psk_encoder.generate_key();

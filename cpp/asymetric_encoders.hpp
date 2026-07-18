@@ -38,12 +38,11 @@ struct OQS_Level5 {
     static constexpr std::size_t secret_size = 32;
 };
 
-
 struct Trait_X25519_SHA512 {
     static constexpr std::size_t pk_size = 32;
     static constexpr std::size_t sk_size = 32;
     static constexpr std::size_t ct_size = 32;
-    static constexpr std::size_t secret_size = 64; // Полный хэш
+    static constexpr std::size_t secret_size = 64; 
 };
 
 template <typename T>
@@ -58,18 +57,40 @@ public:
     using PrivateKeyBuf = std::array<uint8_t, PRIVATE_KEY_SIZE>;
     using CiphertextBuf = std::array<uint8_t, CIPHERTEXT_SIZE>;
     using SecretBuf = std::array<uint8_t, SECRET_SIZE>;
-
-    /**
-     * ГЕНЕРАЦИЯ КЛЮЧЕЙ (Вызывается на стороне СЕРВЕРА)
-     * Заполняет out_pub_key и out_priv_key случайными постквантовыми ключами.
-     */
-    bool generate_keypair(PublicKeyBuf& out_pub_key, PrivateKeyBuf& out_priv_key) {
+private:
+    std::atomic<bool> is_setted = false;
+    PublicKeyBuf public_key;
+    PrivateKeyBuf private_key;
+public:
+    
+    
+    bool set_keys(PublicKeyBuf pb_k, PrivateKeyBuf pr_k){
+        if(is_setted){
+            return false;
+        }
+        public_key = pb_k;
+        private_key = pr_k;
+        return true;
+    }
+    
+    PublicKeyBuf get_public_key(){
+        return public_key;
+    }
+    
+    PrivateKeyBuf get_private_key(){
+        return private_key;
+    }
+    
+    bool generate_keypair() {
         // Инициализируем выбранный в шаблоне алгоритм (например, ML-KEM-1024)
+        if(is_setted){
+            return false;
+        }
         OQS_KEM* kem = OQS_KEM_new(T::alg_name);
         if (!kem) return false;
 
         // Генерируем пару ключей. Функция сама заполнит массивы нужным числом байт
-        int rc = OQS_KEM_keypair(kem, out_pub_key.data(), out_priv_key.data());
+        int rc = OQS_KEM_keypair(kem, public_key.data(), private_key.data());
 
         // Обязательно освобождаем память структуры
         OQS_KEM_free(kem);
@@ -87,6 +108,9 @@ public:
     }
 
     bool decapsulate(const PrivateKeyBuf& priv_key, const CiphertextBuf& ciphertext, SecretBuf& out_secret) {
+        if(not is_setted){
+            return false;
+        }
         OQS_KEM* kem = OQS_KEM_new(T::alg_name);
         if (!kem) return false;
         int rc = OQS_KEM_decaps(kem, out_secret.data(), ciphertext.data(), priv_key.data());
