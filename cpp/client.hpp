@@ -86,7 +86,7 @@ public:
                 auto now = std::chrono::steady_clock::now().time_since_epoch();
                 ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
                 for(int64_t i = 0; i <1000000; i++){
-                    send_packet(data, nanoseconds+ns(10000*i));
+                    send_packet(data, nanoseconds+ns(1000*i));
                 }
                 
                 break;
@@ -101,7 +101,7 @@ public:
             }
                 
         }
-        return;
+        return true;
     }
     void send_packet(std::vector<uint8_t> data, ns timestamp = ns(0)){
         NetworkPacket packet = NetworkPacket();
