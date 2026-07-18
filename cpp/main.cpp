@@ -66,6 +66,7 @@ int main() {
     try {
         asio::io_context io_context;
         
+        /*
         Server s = myserver(io_context);
         s.set_mode(0);
 		s.psk_encoder.generate_key();
@@ -82,8 +83,8 @@ int main() {
 		t.detach();
         std::thread t2 = std::thread(printer2,std::ref(s));
         t2.detach();
-        
-        Client c = myclient(io_context, 8080, "127.0.0.1");
+        */
+        Client c = myclient(io_context, 8080, "192.168.1.9");
         c.lgr.global_preset = "Client";
         c.connect();
         sleep(1000);
@@ -91,7 +92,7 @@ int main() {
 
         
         sleep(30000);
-		s.stop_server();
+		//s.stop_server();
         
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
