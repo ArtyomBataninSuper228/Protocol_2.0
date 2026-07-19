@@ -510,7 +510,7 @@ public:
                 return true;
             }
             else {
-                return false:
+                return false;
             }
         }
         catch (const std::system_error& e) {
