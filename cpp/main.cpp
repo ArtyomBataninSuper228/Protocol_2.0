@@ -53,7 +53,7 @@ void run_context(asio::io_context& io_context) {
 void printer2(myserver &s){
     while (1) {
         std::cout<< "Pacets: " << s.num << std::endl;
-        sleep(2);
+        Sleep(2000);
     }
 }
 
@@ -89,11 +89,11 @@ int main() {
         Client c = myclient(io_context, 8080, "127.0.0.1");
         c.lgr.global_preset = "Client";
         c.connect();
-        sleep(1000000000);
+        Sleep(1000000000);
         c.close();
 
         
-        sleep(30000000);
+        Sleep(30000000);
 		//s.stop_server();
     
         

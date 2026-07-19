@@ -315,10 +315,10 @@ struct SessionCryptoStorage {
     }
 };
 
-struct NetworkPacket {
+struct NetworkPacket_old {
     std::vector<uint8_t> data;
     std::chrono::nanoseconds timestamp;
-    bool operator<(const NetworkPacket& other) const {
+    bool operator<(const NetworkPacket_old& other) const {
             // Меняем логику: текущий пакет "меньше" (хуже),
             // если его время БОЛЬШЕ времени другого пакета, что бы priority_queue первым отдавала элемент с наименьшим временем отправки.
             return timestamp > other.timestamp;
@@ -328,7 +328,7 @@ struct NetworkPacket {
 
 class ThreadSafeQueue {
 private:
-    std::priority_queue<NetworkPacket> raw_queue;
+    std::priority_queue<NetworkPacket_old> raw_queue;
     std::mutex mtx;
     std::condition_variable cv;
     std::atomic<std::chrono::nanoseconds::rep> next_target{
@@ -341,7 +341,7 @@ private:
             stopped.store(true, std::memory_order_release);
             cv.notify_all(); // будим всех, кто спит в cv.wait / wait_until
         }
-        void push(NetworkPacket pkt) {
+        void push(NetworkPacket_old pkt) {
             auto t = pkt.timestamp.count();
             {
                 std::lock_guard<std::mutex> lock(mtx);
@@ -353,7 +353,7 @@ private:
             cv.notify_one();
         }
     
-    bool pop_batch(std::vector<NetworkPacket>& out_batch) {
+    bool pop_batch(std::vector<NetworkPacket_old>& out_batch) {
         std::unique_lock<std::mutex> lock(mtx);
 
         // 1. Ждем, пока очередь пуста или не пришел сигнал остановки
@@ -386,14 +386,14 @@ private:
                 break;
             }
 
-            out_batch.push_back(std::move(const_cast<NetworkPacket&>(raw_queue.top())));
+            out_batch.push_back(std::move(const_cast<NetworkPacket_old&>(raw_queue.top())));
             raw_queue.pop();
         }
 
         return true;
     }
 
-    bool pop(NetworkPacket& out_pkt) {
+    bool pop(NetworkPacket_old& out_pkt) {
             std::unique_lock<std::mutex> lock(mtx, std::defer_lock);
 
             while (true) {
@@ -416,7 +416,7 @@ private:
                 auto target = raw_queue.top().timestamp;
 
                 if (target <= now) {
-                    out_pkt = std::move(const_cast<NetworkPacket&>(raw_queue.top()));
+                    out_pkt = std::move(const_cast<NetworkPacket_old&>(raw_queue.top()));
                     raw_queue.pop();
                     return true;
                 }
@@ -443,9 +443,93 @@ private:
             
 };
 
+struct NetworkPacket {
+    std::array<uint8_t, 1500> data;
+    size_t size = 0;
+};
+
+// Структура одного слота (бакета) карусели
+template <size_t N>
+struct alignas(64) PacketBucket {
+    std::mutex mtx;
+    size_t packet_count = 0; 
+    std::array<NetworkPacket, N> packets;
+
+    void clear() {
+        packet_count = 0;
+    }
+};
+
+template <int M, int N>
+class Karusel_Buffer {
+    std::atomic<bool> is_run = false;
+	std::atomic<int> k = 0;
+    std::array<PacketBucket<N>, M> karusel;
+    std::condition_variable cv;
+    ns next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+    
+public:
+    void push(const NetworkPacket& pkt, ns timestamp) {
+        // Implementation for pushing packets into the carousel buffer
+        while (1) {
+            ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+            int num = max(1, (timestamp - nanoseconds)/SPIN_THRESHOLD);
+            if (num > 9) {
+				std::this_thread::sleep_for(SPIN_THRESHOLD*(num-9));
+                continue;
+			}
+			int ind = (k + num) % M;
+            while (karusel[ind].packet_count == N and ind < M) {
+                ind++;
+            }
+            if (ind < M) {
+                std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
+                karusel[ind].packets[karusel[ind].packet_count++] = pkt;
+				lock.unlock();
+                break;
+            }
+            else {
+                std::this_thread::sleep_for(SPIN_THRESHOLD);
+                continue;
+            }
+        }
+    }
+
+    bool send(asio::ip::udp::socket& socket) {
+        next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now) + SPIN_THRESHOLD;
+        try {
+            int ind = k % M;
+            std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
+            for (size_t i = 0; i < karusel[ind].packet_count; ++i) {
+                socket.send(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size));
+            }
+            karusel[ind].clear();
+            k++;
+            cv.wait_until(lock, std::chrono::steady_clock::time_point(next_time));
+            if (is_run.load(std::memory_order_acquire)) {
+                return true;
+            }
+            else {
+                return false:
+            }
+        }
+        catch (const std::system_error& e) {
+            std::cerr << "Socket send error: " << e.what() << std::endl;
+            return false;
+        }
+    }
+    void stop() {
+		is_run.store(false, std::memory_order_release);
+		cv.notify_all();
+    }
+    
+
+};
+
 class Zero_Class{
     
 };
 
 #pragma GCC visibility pop
 #endif /* stuff_ */
+
