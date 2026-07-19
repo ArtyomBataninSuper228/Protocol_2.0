@@ -86,7 +86,7 @@ public:
                 auto now = std::chrono::steady_clock::now().time_since_epoch();
                 ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
                 for(int64_t i = 0; i <1000000; i++){
-                    send_packet(data, nanoseconds+ns(1000*i));
+                    send_packet(data, nanoseconds+ns(100000*i));
                 }
                 
                 break;
@@ -127,10 +127,13 @@ public:
         }
     }
     void start_send(){
-        NetworkPacket packet;
+        std::vector<NetworkPacket> packets;
         while (is_running){
-            if(packet_queue.pop(packet)){
-                socket_.send_to(asio::buffer(packet.data), server_addr_);
+            if(packet_queue.pop_batch(packets)){
+                for(NetworkPacket packet : packets){
+                    socket_.send_to(asio::buffer(packet.data), server_addr_);
+                }
+                packets.clear();
             }
             else{
                 break;

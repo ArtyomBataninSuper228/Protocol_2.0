@@ -352,6 +352,46 @@ private:
                        cur, t, std::memory_order_relaxed)) {}
             cv.notify_one();
         }
+    
+    bool pop_batch(std::vector<NetworkPacket>& out_batch) {
+        std::unique_lock<std::mutex> lock(mtx);
+
+        // 1. Ждем, пока очередь пуста или не пришел сигнал остановки
+        cv.wait(lock, [this] {
+            return !raw_queue.empty() || stopped.load(std::memory_order_acquire);
+        });
+
+        if (stopped.load(std::memory_order_acquire)) {
+            return false;
+        }
+
+        auto now = std::chrono::steady_clock::now().time_since_epoch();
+        auto target = raw_queue.top().timestamp;
+
+        // 2. Если время первого пакета еще не пришло - засыпаем через ОС
+        if (target > now) {
+            // Просыпаемся либо по таймеру, либо если кто-то добавит более срочный пакет
+            cv.wait_until(lock, std::chrono::steady_clock::time_point(target));
+            // После пробуждения просто возвращаем пустой батч,
+            // цикл отправителя вызовет метод заново
+            return true;
+        }
+
+        // 3. Собираем пачку: забираем ВСЕ пакеты, чье время (target) <= now
+        while (!raw_queue.empty()) {
+            auto pkt_time = raw_queue.top().timestamp;
+            
+            // Если следующий пакет отправлять еще рано — останавливаем сбор пачки
+            if (pkt_time > std::chrono::steady_clock::now().time_since_epoch()) {
+                break;
+            }
+
+            out_batch.push_back(std::move(const_cast<NetworkPacket&>(raw_queue.top())));
+            raw_queue.pop();
+        }
+
+        return true;
+    }
 
     bool pop(NetworkPacket& out_pkt) {
             std::unique_lock<std::mutex> lock(mtx, std::defer_lock);
@@ -390,7 +430,6 @@ private:
                 }
 
                 lock.unlock();
-
                 while (true) {
                     if (stopped.load(std::memory_order_acquire)) {
                         return false; // выход из spin-фазы по флагу
