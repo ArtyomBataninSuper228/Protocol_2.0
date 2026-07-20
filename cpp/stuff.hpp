@@ -448,6 +448,23 @@ struct NetworkPacket {
     size_t size = 0;
 };
 
+NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
+    // Безопасность: проверяем, что вектор не превышает размер массива
+    if (vec.size() > 1500) {
+        throw std::runtime_error("Vector size exceeds 1500 bytes!");
+    }
+
+    NetworkPacket packet;
+
+    // Копируем данные из вектора в начало массива
+    std::copy(vec.begin(), vec.end(), packet.data.begin());
+
+    // Запоминаем реальный размер
+    packet.size = vec.size();
+
+    return packet;
+}
+
 // Структура одного слота (бакета) карусели
 template <size_t N>
 struct alignas(64) PacketBucket {
@@ -466,52 +483,51 @@ class Karusel_Buffer {
 	std::atomic<int> k = 0;
     std::array<PacketBucket<N>, M> karusel;
     std::condition_variable cv;
-    ns next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+    
+    
     
 public:
-    void push(const NetworkPacket& pkt, ns timestamp) {
+    bool push(const NetworkPacket&& pkt, ns timestamp) {
         // Implementation for pushing packets into the carousel buffer
-        while (1) {
-            ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
-            int num = max(1, (timestamp - nanoseconds)/SPIN_THRESHOLD);
-            if (num > 9) {
-				std::this_thread::sleep_for(SPIN_THRESHOLD*(num-9));
-                continue;
-			}
-			int ind = (k + num) % M;
-            while (karusel[ind].packet_count == N and ind < M) {
-                ind++;
-            }
-            if (ind < M) {
-                std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
-                karusel[ind].packets[karusel[ind].packet_count++] = pkt;
-				lock.unlock();
-                break;
-            }
-            else {
-                std::this_thread::sleep_for(SPIN_THRESHOLD);
-                continue;
-            }
+        auto now = std::chrono::steady_clock::now().time_since_epoch();
+        ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+        int num = std::max<size_t>(1, (timestamp - nanoseconds) / SPIN_THRESHOLD);
+        if (num > 9) {
+            return false;
         }
+        int ind = (k + num) % M;
+        while (karusel[ind].packet_count == N and ind < M) {
+            ind++;
+        }
+        if (ind < M) {
+            std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
+            lock.lock();
+            karusel[ind].packets[karusel[ind].packet_count++] = std::move(pkt);
+            lock.unlock();
+            return true;
+        }
+        return false;
     }
 
     bool send(asio::ip::udp::socket& socket) {
-        next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now) + SPIN_THRESHOLD;
+        auto now = std::chrono::steady_clock::now().time_since_epoch();
+        ns next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+        int ind = 0;
         try {
-            int ind = k % M;
-            std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
-            for (size_t i = 0; i < karusel[ind].packet_count; ++i) {
-                socket.send(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size));
+            while (is_run.load(std::memory_order_acquire)) {
+				next_time += SPIN_THRESHOLD;
+                ind = k % M;
+                std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
+                lock.lock();
+                for (size_t i = 0; i < karusel[ind].packet_count; ++i) {
+                    socket.send(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size));
+                }
+                karusel[ind].clear();
+                k++;
+                lock.unlock();
+                cv.wait_until(lock, std::chrono::steady_clock::time_point(next_time));
             }
-            karusel[ind].clear();
-            k++;
-            cv.wait_until(lock, std::chrono::steady_clock::time_point(next_time));
-            if (is_run.load(std::memory_order_acquire)) {
-                return true;
-            }
-            else {
-                return false;
-            }
+            
         }
         catch (const std::system_error& e) {
             std::cerr << "Socket send error: " << e.what() << std::endl;

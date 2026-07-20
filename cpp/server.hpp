@@ -156,9 +156,12 @@ public:
         // Фаза 2: Открытие сокета и бинд порта
         state = 2;
         try {
+            asio::socket_base::send_buffer_size option(1024 * 1024*10); // 1 МБ буфер
+            
             socket_.open(asio::ip::udp::v4());
             socket_.bind(asio::ip::udp::endpoint(asio::ip::udp::v4(), port_));
             lgr.log(0, "First check: Network", "Socket bound successfully to port " + std::to_string(port_));
+            socket_.set_option(option);
         } catch (const std::system_error& e) {
             lgr.log(3, "First check: Network", std::string("Socket bind error: ") + e.what());
             state = -1;

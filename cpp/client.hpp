@@ -24,7 +24,8 @@ class Client{
     asio::ip::udp::endpoint server_addr_;
     asio::io_context& io_context_;
     asio::ip::udp::socket socket_;
-    ThreadSafeQueue packet_queue = ThreadSafeQueue();
+    using p_buffer = Karusel_Buffer<10, 2000>;
+    p_buffer packet_queue = p_buffer();
     
     //reciever data
     std::array<uint8_t, 1500> buffer;
@@ -104,15 +105,13 @@ public:
         return true;
     }
     void send_packet(std::vector<uint8_t> data, ns timestamp = ns(0)){
-        NetworkPacket packet = NetworkPacket();
+        //NetworkPacket packet = NetworkPacket();
         
         switch(mode){
             case 0:{
                 auto data_hash = hasher.hash_single(data);
                 data.insert(data.end(), data_hash.begin(), data_hash.end());
-                packet.data = data;
-                packet.timestamp = timestamp;
-                packet_queue.push(packet);
+                packet_queue.push(convert_vector_to_array(data), timestamp  );
                 break;
             }
             case 1:{
@@ -127,15 +126,8 @@ public:
         }
     }
     void start_send(){
-        std::vector<NetworkPacket> packets;
         while (is_running){
-            if(packet_queue.pop_batch(packets)){
-                for(NetworkPacket packet : packets){
-                    socket_.send_to(asio::buffer(packet.data), server_addr_);
-                }
-                packets.clear();
-            }
-            else{
+            if(not packet_queue.send(socket_)){
                 break;
             }
             

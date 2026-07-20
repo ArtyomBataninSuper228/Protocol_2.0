@@ -13,7 +13,7 @@
 using asio::ip::udp;
 
 using conn = Connection<ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Alvays_True_Access_Control<OqsEncoder<OQS_Level5>>, Zero_Class, Zero_Class>;
-using myserver = Server<conn, ChaCha20Poly1305Coder, ChaCha20Poly1305Coder, UniversalHasher<Trait_BLAKE2b>>;
+using myserver = Server<conn, ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>>;
 
 using myclient = Client< XChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_SHA256>>;
 
@@ -86,11 +86,13 @@ int main() {
         sleep(3000000);
          */
         
-        Client c = myclient(io_context, 8080, "127.0.0.1");
-        c.lgr.global_preset = "Client";
-        c.connect();
+        auto c = std::make_unique<myclient>(io_context, 8080, "192.168.1.18");
+
+        c->lgr.global_preset = "Client";
+        c->connect();
+
         Sleep(1000000000);
-        c.close();
+        c->close();
 
         
         Sleep(30000000);
