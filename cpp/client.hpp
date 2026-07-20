@@ -26,6 +26,7 @@ class Client{
     asio::ip::udp::socket socket_;
     using p_buffer = Karusel_Buffer<10, 2000>;
     p_buffer packet_queue = p_buffer();
+    asio::steady_timer wait_timer;
     
     //reciever data
     std::array<uint8_t, 1500> buffer;
@@ -40,10 +41,11 @@ public:
     Hasher hasher = Hasher();
     Logger lgr = Logger(io_context_);
     
-    Client(asio::io_context& io_context, int port, std::string addr)
-        : io_context_(io_context),
-          socket_(io_context), port_(port), server_addr_(asio::ip::make_address(addr), port_)
+    Client(asio::io_context& io_context, int port, std::string addr):io_context_(io_context),
+    socket_(io_context), port_(port), server_addr_(asio::ip::make_address(addr), port_), wait_timer(io_context)
     {
+        
+        
         state = 0; // Initialising
         if (sodium_init() < 0) {
             lgr.log(3, "Constructor", "Libsodium init failed!");
@@ -64,6 +66,7 @@ public:
     
     bool connect(){
         
+        packet_queue.is_run = true;
         try {
             socket_.open(asio::ip::udp::v4());
         } catch (const std::system_error& e) {
@@ -86,8 +89,8 @@ public:
                 }
                 auto now = std::chrono::steady_clock::now().time_since_epoch();
                 ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
-                for(int64_t i = 0; i <1000000; i++){
-                    send_packet(data, nanoseconds+ns(100000*i));
+                for(int64_t i = 0; i <20000; i++){
+                    send_packet(data, nanoseconds+ns(2000000*i));
                 }
                 
                 break;
@@ -102,6 +105,7 @@ public:
             }
                 
         }
+        
         return true;
     }
     void send_packet(std::vector<uint8_t> data, ns timestamp = ns(0)){
@@ -111,7 +115,11 @@ public:
             case 0:{
                 auto data_hash = hasher.hash_single(data);
                 data.insert(data.end(), data_hash.begin(), data_hash.end());
-                packet_queue.push(convert_vector_to_array(data), timestamp  );
+                while(not packet_queue.push(convert_vector_to_array(data), timestamp  )){
+                    wait_timer.expires_after(SPIN_THRESHOLD);
+                    wait_timer.wait();
+                }
+                
                 break;
             }
             case 1:{
@@ -127,7 +135,7 @@ public:
     }
     void start_send(){
         while (is_running){
-            if(not packet_queue.send(socket_)){
+            if(not packet_queue.send(socket_, server_addr_)){
                 break;
             }
             

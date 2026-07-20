@@ -13,7 +13,7 @@
 using asio::ip::udp;
 
 using conn = Connection<ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>, Alvays_True_Access_Control<OqsEncoder<OQS_Level5>>, Zero_Class, Zero_Class>;
-using myserver = Server<conn, ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_BLAKE2b>>;
+using myserver = Server<conn, ChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_SHA256>>;
 
 using myclient = Client< XChaCha20Poly1305Coder, OqsEncoder<OQS_Level5>, UniversalHasher<Trait_SHA256>>;
 
@@ -53,7 +53,7 @@ void run_context(asio::io_context& io_context) {
 void printer2(myserver &s){
     while (1) {
         std::cout<< "Pacets: " << s.num << std::endl;
-        Sleep(2000);
+        sleep(2);
     }
 }
 
@@ -66,7 +66,7 @@ int main() {
     try {
         asio::io_context io_context;
         
-        /*
+        
         Server s = myserver(io_context);
         s.set_mode(0);
 		s.psk_encoder.generate_key();
@@ -83,19 +83,19 @@ int main() {
 		t.detach();
         std::thread t2 = std::thread(printer2,std::ref(s));
         t2.detach();
-        sleep(3000000);
-         */
+        //sleep(3000000);
+         
         
-        auto c = std::make_unique<myclient>(io_context, 8080, "192.168.1.18");
+        auto c = std::make_unique<myclient>(io_context, 8080, "192.168.0.102");
 
         c->lgr.global_preset = "Client";
         c->connect();
 
-        Sleep(1000000000);
+        sleep(1000000000);
         c->close();
 
         
-        Sleep(30000000);
+        //Sleep(30000000);
 		//s.stop_server();
     
         

@@ -47,7 +47,7 @@ using namespace std::chrono_literals;
 
 #elif defined(__APPLE__)
     // В macOS/iOS стандартный шаг планировщика чаще всего равен 10 мс
-    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 10000000ns;
+    constexpr std::chrono::nanoseconds SPIN_THRESHOLD = 3000000ns;
 
 #else
     // Значение по умолчанию для остальных ОС (10 мс)
@@ -448,7 +448,7 @@ struct NetworkPacket {
     size_t size = 0;
 };
 
-NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
+inline NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
     // Безопасность: проверяем, что вектор не превышает размер массива
     if (vec.size() > 1500) {
         throw std::runtime_error("Vector size exceeds 1500 bytes!");
@@ -479,7 +479,7 @@ struct alignas(64) PacketBucket {
 
 template <int M, int N>
 class Karusel_Buffer {
-    std::atomic<bool> is_run = false;
+    
 	std::atomic<int> k = 0;
     std::array<PacketBucket<N>, M> karusel;
     std::condition_variable cv;
@@ -487,6 +487,8 @@ class Karusel_Buffer {
     
     
 public:
+    std::atomic<bool> is_run = false;
+    
     bool push(const NetworkPacket&& pkt, ns timestamp) {
         // Implementation for pushing packets into the carousel buffer
         auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -509,9 +511,11 @@ public:
         return false;
     }
 
-    bool send(asio::ip::udp::socket& socket) {
+    bool send(asio::ip::udp::socket& socket, asio::ip::udp::endpoint addr) {
+        auto start_t = std::chrono::steady_clock::now().time_since_epoch();
         auto now = std::chrono::steady_clock::now().time_since_epoch();
-        ns next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+        auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+        ns next_time = std::chrono::duration_cast<std::chrono::nanoseconds>(start_t);
         int ind = 0;
         try {
             while (is_run.load(std::memory_order_acquire)) {
@@ -520,12 +524,17 @@ public:
                 std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
                 lock.lock();
                 for (size_t i = 0; i < karusel[ind].packet_count; ++i) {
-                    socket.send(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size));
+                    socket.send_to(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size), addr);
                 }
+                //std::cout<<karusel[ind].packet_count<<std::endl;
                 karusel[ind].clear();
                 k++;
                 lock.unlock();
-                cv.wait_until(lock, std::chrono::steady_clock::time_point(next_time));
+                now = std::chrono::steady_clock::now().time_since_epoch();
+                now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
+                //std::cout<<"Wait for" << next_time.count() - now_ns.count()<<std::endl;
+                std::this_thread::sleep_for(next_time - now_ns);
+                //cv.wait_until(lock, std::chrono::steady_clock::time_point(next_time));
             }
             
         }
