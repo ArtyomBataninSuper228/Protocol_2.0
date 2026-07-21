@@ -46,6 +46,8 @@ private:
     std::array<uint8_t, 1500> buffer;
     asio::ip::udp::endpoint remote_endpoint;
     uint16_t len;
+    using p_buffer = Karusel_Buffer<10, 2000>;
+    std::unique_ptr<p_buffer> packet_queue = std::make_unique<p_buffer>();
     
     
     // Security
@@ -63,6 +65,7 @@ private:
     std::atomic<short> mode = 0;
 	Hasher hasher = Hasher();
 	std::thread reciever;
+    asio::steady_timer wait_timer;
 public:
     // Logs
     Logger lgr = Logger(io_context_);
@@ -76,7 +79,7 @@ public:
 public:
     Server(asio::io_context& io_context)
         : io_context_(io_context),
-          socket_(io_context)
+          socket_(io_context), wait_timer(io_context)
     {
         state = 0; // Initialising
         if (sodium_init() < 0) {
@@ -101,7 +104,32 @@ public:
             port_ = port;
         }
     }
-
+    
+    void send_packet(std::vector<uint8_t> data, asio::ip::udp::endpoint addr, ns timestamp = ns(0)){
+        //NetworkPacket packet = NetworkPacket();
+        
+        switch(mode.load()){
+            case 0:{
+                auto data_hash = hasher.hash_single(data);
+                data.insert(data.end(), data_hash.begin(), data_hash.end());
+                while(not packet_queue->push(convert_vector_to_array(data, addr), timestamp)){
+                    wait_timer.expires_after(SPIN_THRESHOLD);
+                    wait_timer.wait();
+                }
+                
+                break;
+            }
+            case 1:{
+                
+                break;
+            }
+            case 2:{
+                
+                break;
+            }
+                
+        }
+    }
     void set_psk(const std::array<uint8_t, SymmetricCoder::KEY_BYTES>& key) {
         if (state == 0) {
             if (psk_encoder.set_key(key)) {
@@ -156,7 +184,7 @@ public:
         // Фаза 2: Открытие сокета и бинд порта
         state = 2;
         try {
-            asio::socket_base::send_buffer_size option(1024 * 1024*10); // 1 МБ буфер
+            asio::socket_base::send_buffer_size option(1024 * 1024*10); // 10 МБ буфер
             
             socket_.open(asio::ip::udp::v4());
             socket_.bind(asio::ip::udp::endpoint(asio::ip::udp::v4(), port_));
@@ -185,10 +213,18 @@ public:
         is_running = false;
         this->socket_.close();
         lgr.stop_autosave();
-		reciever.join();
+        packet_queue->stop();
 		state = 0;
         
         
+    }
+    
+    void start_send(){
+        while (is_running){
+            if(not packet_queue->send(socket_)){
+                break;
+            }
+        }
     }
 
 private:

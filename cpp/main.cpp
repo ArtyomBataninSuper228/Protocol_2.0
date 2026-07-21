@@ -84,15 +84,22 @@ int main() {
         std::thread t2 = std::thread(printer2,std::ref(s));
         t2.detach();
         //sleep(3000000);
-         
-        
-        auto c = std::make_unique<myclient>(io_context, 8080, "192.168.0.102");
+        myclient c = myclient(io_context, 8080, "127.0.0.1");
+        c.lgr.global_preset = "Client";
+        c.connect();
+        io_context.run();
+        while (1){
+            sleep(1000000000);
+        }
+        /*
+        auto c = std::make_unique<myclient>(io_context, 8080, "127.0.0.1");
 
         c->lgr.global_preset = "Client";
         c->connect();
 
         sleep(1000000000);
         c->close();
+         */
 
         
         //Sleep(30000000);

@@ -25,7 +25,7 @@ class Client{
     asio::io_context& io_context_;
     asio::ip::udp::socket socket_;
     using p_buffer = Karusel_Buffer<10, 2000>;
-    p_buffer packet_queue = p_buffer();
+    std::unique_ptr<p_buffer> packet_queue = std::make_unique<p_buffer>();
     asio::steady_timer wait_timer;
     
     //reciever data
@@ -66,7 +66,7 @@ public:
     
     bool connect(){
         
-        packet_queue.is_run = true;
+        packet_queue->is_run = true;
         try {
             socket_.open(asio::ip::udp::v4());
         } catch (const std::system_error& e) {
@@ -75,9 +75,11 @@ public:
             return false;
         }
         is_running = true;
+        
         sender = std::thread([this]() {
             this->start_send();
             });
+         
         reciever = std::thread([this]() {
             this->start_receive();
             });
@@ -89,8 +91,8 @@ public:
                 }
                 auto now = std::chrono::steady_clock::now().time_since_epoch();
                 ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
-                for(int64_t i = 0; i <20000; i++){
-                    send_packet(data, nanoseconds+ns(2000000*i));
+                for(int64_t i = 0; i <40000; i++){
+                    send_packet(data, nanoseconds+ns(200000*i));
                 }
                 
                 break;
@@ -115,7 +117,7 @@ public:
             case 0:{
                 auto data_hash = hasher.hash_single(data);
                 data.insert(data.end(), data_hash.begin(), data_hash.end());
-                while(not packet_queue.push(convert_vector_to_array(data), timestamp  )){
+                while(not packet_queue->push(convert_vector_to_array(data, server_addr_), timestamp)){
                     wait_timer.expires_after(SPIN_THRESHOLD);
                     wait_timer.wait();
                 }
@@ -135,10 +137,9 @@ public:
     }
     void start_send(){
         while (is_running){
-            if(not packet_queue.send(socket_, server_addr_)){
+            if(not packet_queue->send(socket_)){
                 break;
             }
-            
         }
     }
     
@@ -196,7 +197,7 @@ public:
             }
         }
     void close(){
-        packet_queue.stop();
+        packet_queue->stop();
         is_running = false;
         socket_.close();
     }

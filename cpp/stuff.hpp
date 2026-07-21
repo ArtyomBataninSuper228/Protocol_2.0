@@ -446,9 +446,10 @@ private:
 struct NetworkPacket {
     std::array<uint8_t, 1500> data;
     size_t size = 0;
+    asio::ip::udp::endpoint addr;
 };
 
-inline NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
+inline NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec, asio::ip::udp::endpoint addr) {
     // Безопасность: проверяем, что вектор не превышает размер массива
     if (vec.size() > 1500) {
         throw std::runtime_error("Vector size exceeds 1500 bytes!");
@@ -461,6 +462,7 @@ inline NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
 
     // Запоминаем реальный размер
     packet.size = vec.size();
+    packet.addr = addr;
 
     return packet;
 }
@@ -469,7 +471,7 @@ inline NetworkPacket convert_vector_to_array(const std::vector<uint8_t>& vec) {
 template <size_t N>
 struct alignas(64) PacketBucket {
     std::mutex mtx;
-    size_t packet_count = 0; 
+    std::atomic<size_t> packet_count = 0;
     std::array<NetworkPacket, N> packets;
 
     void clear() {
@@ -480,7 +482,7 @@ struct alignas(64) PacketBucket {
 template <int M, int N>
 class Karusel_Buffer {
     
-	std::atomic<int> k = 0;
+	std::atomic<long long> k = 0;
     std::array<PacketBucket<N>, M> karusel;
     std::condition_variable cv;
     
@@ -493,25 +495,28 @@ public:
         // Implementation for pushing packets into the carousel buffer
         auto now = std::chrono::steady_clock::now().time_since_epoch();
         ns nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
-        int num = std::max<size_t>(1, (timestamp - nanoseconds) / SPIN_THRESHOLD);
-        if (num > 9) {
+        long long num = std::max<long long>(1, (timestamp - nanoseconds) / SPIN_THRESHOLD);
+        if (num > M-1) {
             return false;
         }
         int ind = (k + num) % M;
-        while (karusel[ind].packet_count == N and ind < M) {
-            ind++;
+        size_t last_space = karusel[ind].packet_count.fetch_add(1);
+        while (last_space >= N and num < M) {
+            num++;
+            ind = (k + num) % M;
+            last_space = karusel[ind].packet_count.fetch_add(1);
         }
-        if (ind < M) {
+        if (last_space < N) {
             std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
             lock.lock();
-            karusel[ind].packets[karusel[ind].packet_count++] = std::move(pkt);
+            karusel[ind].packets[last_space] = std::move(pkt);
             lock.unlock();
             return true;
         }
         return false;
     }
 
-    bool send(asio::ip::udp::socket& socket, asio::ip::udp::endpoint addr) {
+    bool send(asio::ip::udp::socket& socket) {
         auto start_t = std::chrono::steady_clock::now().time_since_epoch();
         auto now = std::chrono::steady_clock::now().time_since_epoch();
         auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
@@ -523,12 +528,12 @@ public:
                 ind = k % M;
                 std::unique_lock<std::mutex> lock(karusel[ind].mtx, std::defer_lock);
                 lock.lock();
-                for (size_t i = 0; i < karusel[ind].packet_count; ++i) {
-                    socket.send_to(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size), addr);
+                for (size_t i = 0; i < std::min<size_t>(karusel[ind].packet_count, N); ++i) {
+                    socket.send_to(asio::buffer(karusel[ind].packets[i].data, karusel[ind].packets[i].size), karusel[ind].packets[i].addr);
                 }
-                //std::cout<<karusel[ind].packet_count<<std::endl;
                 karusel[ind].clear();
                 k++;
+                k = k%M;
                 lock.unlock();
                 now = std::chrono::steady_clock::now().time_since_epoch();
                 now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now);
